@@ -11,11 +11,14 @@ pub mod compile;
 pub mod diag;
 pub mod emit;
 pub mod lex;
+pub mod json;
 pub mod parse;
+pub mod resolver;
 pub mod rules;
 
 pub use diag::{Diagnostic, Severity};
-pub use compile::{compile, Resolver};
+pub use compile::compile;
+pub use resolver::Resolver;
 pub use emit::emit;
 pub use parse::parse;
 

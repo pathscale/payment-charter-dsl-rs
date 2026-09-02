@@ -179,3 +179,47 @@ fn type_table_cross_product() {
     eprintln!("type table: {accepted} accepted, {rejected} rejected");
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
+
+/// `resolver/`: S7–S13, against the `common` tier in the spec repo.
+///
+/// These cannot live in `parse/reject/` because they need data the text does not carry. A
+/// document here is well-formed and refused for what the resolver says about it, which is a
+/// different kind of refusal and worth keeping visibly separate.
+#[test]
+fn resolver_fixtures() {
+    let Some(root) = corpus() else { return };
+    let dir = root.join("resolver");
+    if !dir.is_dir() {
+        return;
+    }
+    let tier = std::fs::read_to_string(root.join("../resolver/common-41.json"))
+        .expect("the common tier ships with the corpus");
+    let resolver = pays_charter::Resolver::from_json(&tier).expect("the common tier parses");
+
+    let mut failures = Vec::new();
+    for f in charters(&dir) {
+        let src = std::fs::read_to_string(&f).unwrap();
+        let name = f.file_name().unwrap().to_string_lossy().to_string();
+        let want = expected_code(&src);
+
+        let ast = match pays_charter::parse(&src) {
+            Ok(a) => a,
+            Err(e) => {
+                failures.push(format!("{name}: did not parse: {}", e[0].render(&src)));
+                continue;
+            }
+        };
+        let diags = pays_charter::resolver::check(&ast, &resolver);
+        let codes: Vec<&str> = diags.iter().filter(|d| d.is_error()).map(|d| d.code).collect();
+
+        match &want {
+            Some(code) if codes.contains(&code.as_str()) => {}
+            Some(code) => {
+                failures.push(format!("{name}: wanted {code}, got {codes:?}"));
+            }
+            None if codes.is_empty() => {}
+            None => failures.push(format!("{name}: should resolve cleanly, got {codes:?}")),
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}

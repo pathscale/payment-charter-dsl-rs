@@ -4,40 +4,18 @@
 //! members are expanded, names are dereferenced, money is converted to minor units, offsets
 //! are turned into seconds and dates into days.
 //!
-//! Compilation is where the resolver would supply `decimals`, `class` and the rest. Until
-//! that pass exists, [`Resolver`] is supplied by the caller and a missing entry is an error
-//! rather than a guess — an assumed scale is a wrong payment.
+//! Compilation is where the resolver supplies `decimals`. A missing entry is E402 rather than
+//! a guess: an assumed scale is a wrong payment by a factor of ten. S7 through S13 run in
+//! [`crate::resolver`] before this, so by the time compilation reads a scale the reference has
+//! already been verified segment by segment.
 
 use crate::ast::{self, Charter, Decl};
 use crate::diag::Diagnostic;
+use crate::resolver::Resolver;
 use pays_policy::calendar::{days_from_civil, CalUnit};
 use pays_policy::compiled::*;
 use pays_policy::Plane;
 use std::collections::HashMap;
-
-/// What the resolver would supply. Deliberately the minimum the engine needs.
-#[derive(Clone, Debug, Default)]
-pub struct Resolver {
-    pub decimals: HashMap<String, u8>,
-}
-
-impl Resolver {
-    /// A resolver that reports the same scale for every asset. For tests and for fixtures
-    /// whose subject is not the scale; never for production, where a wrong scale is a wrong
-    /// payment by a factor of ten.
-    pub fn uniform(decimals: u8) -> Self {
-        Self { decimals: HashMap::new() }.with_default(decimals)
-    }
-
-    fn with_default(mut self, d: u8) -> Self {
-        self.decimals.insert(String::from("*"), d);
-        self
-    }
-
-    fn get(&self, asset: &str) -> Option<u8> {
-        self.decimals.get(asset).or_else(|| self.decimals.get("*")).copied()
-    }
-}
 
 pub fn compile(c: &Charter, r: &Resolver) -> Result<Compiled, Vec<Diagnostic>> {
     let mut errors = Vec::new();
@@ -46,7 +24,7 @@ pub fn compile(c: &Charter, r: &Resolver) -> Result<Compiled, Vec<Diagnostic>> {
     let mut assets = Vec::new();
     for d in &c.decls {
         if let Decl::Asset(a) = d {
-            match r.get(&a.name.node) {
+            match r.decimals_for(&a.reference.node) {
                 // §2.6: more than nine decimals is refused, never truncated.
                 Some(dec) if dec > 9 => errors.push(Diagnostic::error(
                     "E223",
