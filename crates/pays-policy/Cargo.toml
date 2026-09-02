@@ -1,0 +1,10 @@
+[package]
+name = "pays-policy"
+description = "Evaluates a compiled Payment Charter. Dependency-free: this is the half the enclave links."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]

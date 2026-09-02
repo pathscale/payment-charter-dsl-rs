@@ -1,0 +1,10 @@
+[package]
+name = "charter-assetref"
+description = "The mint:// and unit:// asset reference parser for the Payment Charter DSL"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]

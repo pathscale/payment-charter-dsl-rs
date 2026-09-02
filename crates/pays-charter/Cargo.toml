@@ -1,0 +1,12 @@
+[package]
+name = "pays-charter"
+description = "Compiles a Payment Charter: lexer, parser, static rules, diagnostics, emitter"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+charter-assetref.workspace = true
+pays-policy.workspace = true

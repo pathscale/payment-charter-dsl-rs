@@ -1,0 +1,18 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/charter-assetref",
+    "crates/pays-policy",
+    "crates/pays-charter",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+license = "Apache-2.0 OR MIT"
+repository = "https://github.com/pathscale/payment-charter-dsl-rs"
+
+[workspace.dependencies]
+charter-assetref = { path = "crates/charter-assetref" }
+pays-policy = { path = "crates/pays-policy" }
