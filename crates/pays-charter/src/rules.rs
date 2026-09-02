@@ -148,7 +148,7 @@ where
                 Kind::Asset => &[Kind::Asset, Kind::AssetGroup],
                 k => core::slice::from_ref(Box::leak(Box::new(k))),
             };
-        cond: &Condition, d: &mut Vec<Diagnostic>|v: &Spanned<Value>, d: &mut Vec<Diagnostic>| {
+            let mut visit = |v: &Spanned<Value>, d: &mut Vec<Diagnostic>| {
                 if let Value::Named(n) = &v.node {
                     want(n, &v.span, kinds, code, what, d);
                 }
@@ -670,7 +670,7 @@ fn field_row(field: &str) -> Option<(&'static [&'static str], &'static [&'static
 
 /// §6 and §2.11, over every condition in the document.
 fn s_type_table(c: &Charter, t: &HashMap<String, Entry>, d: &mut Vec<Diagnostic>) {
-cond: &Condition, d: &mut Vec<Diagnostic>|cond: &Condition, d: &mut Vec<Diagnostic>| walk(cond, t, d);
+    let visit = |cond: &Condition, d: &mut Vec<Diagnostic>| walk(cond, t, d);
     for decl in &c.decls {
         match decl {
             Decl::Prohibit(p) => visit(&p.condition, d),

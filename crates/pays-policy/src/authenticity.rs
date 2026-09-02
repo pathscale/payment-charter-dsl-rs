@@ -272,6 +272,9 @@ pub fn sha256(data: &[u8]) -> [u8; 32] {
 mod tests {
     use super::*;
     use alloc::collections::BTreeMap;
+    // Not in the no_std prelude, and the lib itself does not need it — which is why a
+    // build-only check missed this and only `cargo test` caught it.
+    use alloc::string::ToString;
     use alloc::vec;
 
     #[test]
