@@ -23,6 +23,7 @@ pub fn check(c: &Charter) -> Vec<Diagnostic> {
     s16_at_least_one_limit(c, &mut d);
     s14_s15_s17_escalations(c, &table, &mut d);
     s6_one_asset_per_limit(c, &mut d);
+    s4_exceptions_disjoint(c, &mut d);
     s18_prohibitions_reachable(c, &mut d);
     e314_unlimited_in_root(c, &mut d);
     w3_unused_assets(c, &table, &mut d);
@@ -794,5 +795,118 @@ fn require(
             format!("`{field}` does not take {described}"),
             span.clone(),
         ));
+    }
+}
+
+/// S4 · Exceptions within one dimension MUST be provably disjoint (E304).
+///
+/// The burden runs the way the spec states it: a pair is rejected unless disjointness can be
+/// **proved**, not accepted unless overlap can be. "Any pair a compiler cannot separate" is
+/// rejected, so a conservative prover is the safe kind here — the failure mode of not proving
+/// enough is a document an author must rewrite, and the failure mode of the opposite is a
+/// ceiling resolved at runtime by whichever clause was reached first.
+///
+/// > Forcing disjointness rather than resolving by priority is the strict choice, and it is
+/// > reversible: a later version can relax it without invalidating any charter written under
+/// > it, whereas the reverse breaks documents already deployed.
+///
+/// Prohibitions are exempt in both directions (§7 S4), and are not considered here.
+fn s4_exceptions_disjoint(c: &Charter, d: &mut Vec<Diagnostic>) {
+    let groups: HashMap<&str, Vec<String>> = c
+        .decls
+        .iter()
+        .filter_map(|x| match x {
+            Decl::Group(g) => {
+                Some((g.name.node.as_str(), g.members.iter().map(|m| m.node.to_string()).collect()))
+            }
+            _ => None,
+        })
+        .collect();
+
+    for decl in &c.decls {
+        let Decl::Limit(l) = decl else { continue };
+        let excs = exceptions(l);
+        for i in 0..excs.len() {
+            for j in (i + 1)..excs.len() {
+                if disjoint(&excs[i].condition, &excs[j].condition, &groups) {
+                    continue;
+                }
+                d.push(
+                    Diagnostic::error(
+                        "E304",
+                        format!(
+                            "these two exceptions of `{}` are not provably disjoint. S4 rejects \
+                             a pair a compiler cannot separate rather than resolving it by \
+                             priority: a ceiling settled by declaration order is one a reviewer \
+                             has to simulate, and an author who wrote two clauses believing them \
+                             exclusive would be paid by whichever the parser reached first.",
+                            l.name.node
+                        ),
+                        excs[j].value.span.clone(),
+                    )
+                    .with_related(excs[i].value.span.clone(), "the other one"),
+                );
+            }
+        }
+    }
+}
+
+/// Can these two conditions be proved never to hold together?
+///
+/// Only the shapes that actually occur are proved. Everything else is "not proved", which S4
+/// turns into E304.
+fn disjoint(a: &Condition, b: &Condition, groups: &HashMap<&str, Vec<String>>) -> bool {
+    let (Condition::Compare(x), Condition::Compare(y)) = (a, b) else {
+        // A conjunction is disjoint from something if *either* conjunct is: `X and Y` cannot
+        // hold when X cannot.
+        return match (a, b) {
+            (Condition::And(p, q), other) | (other, Condition::And(p, q)) => {
+                disjoint(p, other, groups) || disjoint(q, other, groups)
+            }
+            _ => false,
+        };
+    };
+    if x.field.node != y.field.node {
+        // Different fields say nothing about each other: `counterparty is A` and
+        // `merchant.category is B` can both hold.
+        return false;
+    }
+
+    match (x.operator.node.as_str(), y.operator.node.as_str()) {
+        // Two positive membership tests over disjoint value sets cannot both hold.
+        ("is" | "in", "is" | "in") => match (members(&x.value.node, groups), members(&y.value.node, groups)) {
+            (Some(p), Some(q)) => !p.iter().any(|m| q.contains(m)),
+            _ => false,
+        },
+        // Non-overlapping date ranges. `before L` and `after R` are disjoint when L <= R.
+        ("before", "after") => match (&x.value.node, &y.value.node) {
+            (Value::Date(l), Value::Date(r)) => l <= r,
+            _ => false,
+        },
+        ("after", "before") => match (&x.value.node, &y.value.node) {
+            (Value::Date(r), Value::Date(l)) => l <= r,
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
+/// The values a comparison can match, with group names expanded. `None` where the shape is
+/// one this prover does not model, which S4 then treats as not-disjoint.
+fn members(v: &Value, groups: &HashMap<&str, Vec<String>>) -> Option<Vec<String>> {
+    match v {
+        Value::Literal(l) => Some(vec![l.to_string()]),
+        Value::Plane(p) => Some(vec![p.clone()]),
+        Value::Date(d) => Some(vec![d.clone()]),
+        // An undeclared name is its own singleton: S21 reports it, and inventing an expansion
+        // here would make one mistake produce two diagnostics.
+        Value::Named(n) => Some(groups.get(n.as_str()).cloned().unwrap_or_else(|| vec![n.clone()])),
+        Value::Set(items) => {
+            let mut out = Vec::new();
+            for i in items {
+                out.extend(members(&i.node, groups)?);
+            }
+            Some(out)
+        }
     }
 }

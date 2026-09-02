@@ -223,3 +223,48 @@ fn resolver_fixtures() {
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
+
+/// `ported/`: cases taken from upstream suites, each carrying its provenance header.
+///
+/// Attribution is not optional and the headers are not decoration: `AGENTS.md` in the corpus
+/// repo carves these out of the house rule against copyright banners so an agent tidying the
+/// tree does not strip them.
+#[test]
+fn ported_fixtures() {
+    let Some(root) = corpus() else { return };
+    let dir = root.join("ported/catala");
+    if !dir.is_dir() {
+        return;
+    }
+    let files = charters(&dir);
+    assert!(!files.is_empty(), "ported/catala is empty");
+
+    let mut failures = Vec::new();
+    for f in &files {
+        let src = std::fs::read_to_string(f).unwrap();
+        let name = f.file_name().unwrap().to_string_lossy().to_string();
+
+        // Every ported fixture must say where it came from.
+        assert!(
+            src.contains("Derived from CatalaLang/catala"),
+            "{name} has no provenance header"
+        );
+        assert!(src.contains("Apache-2.0"), "{name} does not name the upstream licence");
+
+        let want = expected_code(&src);
+        match (&want, pays_charter::check(&src)) {
+            (None, Ok(_)) => {}
+            (None, Err(e)) => failures.push(format!(
+                "{name}: should compile, got {}",
+                e.iter().map(|d| d.code).collect::<Vec<_>>().join(", ")
+            )),
+            (Some(code), Err(e)) if e.iter().any(|d| d.code == code) => {}
+            (Some(code), Err(e)) => failures.push(format!(
+                "{name}: wanted {code}, got {}",
+                e.iter().map(|d| d.code).collect::<Vec<_>>().join(", ")
+            )),
+            (Some(code), Ok(_)) => failures.push(format!("{name}: wanted {code}, but it compiled")),
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
