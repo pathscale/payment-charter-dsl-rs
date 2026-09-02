@@ -10,6 +10,23 @@ pub mod ast;
 pub mod diag;
 pub mod lex;
 pub mod parse;
+pub mod rules;
 
 pub use diag::{Diagnostic, Severity};
 pub use parse::parse;
+
+/// Parse and apply the static rules. Errors and warnings come back together; a caller that
+/// wants only errors filters on [`Diagnostic::is_error`].
+///
+/// Rules needing the resolver (S7–S13, and the minor-unit checks of §2.6) are not applied
+/// here. A document this accepts has satisfied every rule that can be decided from the text
+/// alone, which is not the same as compiling.
+pub fn check(src: &str) -> Result<(ast::Charter, Vec<Diagnostic>), Vec<Diagnostic>> {
+    let charter = parse(src)?;
+    let diags = rules::check(&charter);
+    if diags.iter().any(|d| d.is_error()) {
+        Err(diags)
+    } else {
+        Ok((charter, diags))
+    }
+}

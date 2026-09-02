@@ -77,7 +77,7 @@ fn accept_fixtures_parse() {
         }
         for f in charters(&d) {
             let src = std::fs::read_to_string(&f).unwrap();
-            if let Err(errs) = pays_charter::parse(&src) {
+            if let Err(errs) = pays_charter::check(&src) {
                 let rendered: Vec<_> = errs.iter().map(|e| e.render(&src)).collect();
                 failures.push(format!("{}\n    {}", f.display(), rendered.join("\n    ")));
             }
@@ -97,7 +97,9 @@ fn reject_fixtures_report_the_right_code() {
     };
     // Codes this crate can currently decide. Everything else is a static rule.
     const DECIDED: &[&str] = &[
-        "E101", "E102", "E103", "E218", "E403", "E410", "E411", "E413",
+        "E101", "E102", "E103", "E201", "E210", "E211", "E212", "E213", "E214", "E215",
+        "E216", "E217", "E218", "E220", "E222", "E306", "E307", "E308", "E309", "E310",
+        "E311", "E314", "E316", "E317", "E403", "E410", "E411", "E413",
     ];
 
     let mut wrong = Vec::new();
@@ -105,7 +107,7 @@ fn reject_fixtures_report_the_right_code() {
     for f in charters(&root.join("parse/reject")) {
         let src = std::fs::read_to_string(&f).unwrap();
         let want = expected_code(&src).expect("checked by the fixture test");
-        let got = pays_charter::parse(&src).err().map(|es| {
+        let got = pays_charter::check(&src).err().map(|es| {
             es.iter().filter(|d| d.is_error()).map(|d| d.code.to_string()).collect::<Vec<_>>()
         });
 
