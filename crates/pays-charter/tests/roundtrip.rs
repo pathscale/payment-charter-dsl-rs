@@ -99,3 +99,58 @@ fn roundtrip_fixtures_are_already_canonical() {
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
+
+#[test]
+fn canonical_fixtures_compile_to_their_stored_bytes() {
+    // §9: the same document compiles to byte-identical output under the same resolver version.
+    // §12 signs a digest over exactly these bytes, so a stable ordering is not a nicety — two
+    // engines that serialise one charter differently reject each other's signatures.
+    let Some(root) = corpus() else { return };
+    let dir = root.join("canonical");
+    let files = charters(&dir);
+    assert!(!files.is_empty(), "canonical/ is empty");
+
+    let mut failures = Vec::new();
+    for f in files {
+        let src = std::fs::read_to_string(&f).unwrap();
+        let expected_path = f.with_extension("compiled");
+        let Ok(expected) = std::fs::read_to_string(&expected_path) else {
+            failures.push(format!("{}: no .compiled beside it", f.display()));
+            continue;
+        };
+        let ast = pays_charter::parse(&src).expect("canonical fixtures parse");
+        let compiled = pays_charter::compile(&ast, &pays_charter::Resolver::uniform(2))
+            .expect("canonical fixtures compile");
+        let got = String::from_utf8(pays_policy::compiled::encode(&compiled)).unwrap();
+        if got != expected {
+            failures.push(format!(
+                "{}: compiled bytes differ\n--- stored ---\n{expected}\n--- got ---\n{got}",
+                f.file_name().unwrap().to_string_lossy()
+            ));
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+#[test]
+fn compilation_is_deterministic() {
+    // Compiling twice must produce the same bytes. A map iterated in hash order would pass
+    // the fixture test on the machine that generated the fixtures and fail everywhere else.
+    let Some(root) = corpus() else { return };
+    for f in charters(&root.join("canonical")) {
+        let src = std::fs::read_to_string(&f).unwrap();
+        let once = {
+            let a = pays_charter::parse(&src).unwrap();
+            pays_policy::compiled::encode(
+                &pays_charter::compile(&a, &pays_charter::Resolver::uniform(2)).unwrap(),
+            )
+        };
+        let twice = {
+            let a = pays_charter::parse(&src).unwrap();
+            pays_policy::compiled::encode(
+                &pays_charter::compile(&a, &pays_charter::Resolver::uniform(2)).unwrap(),
+            )
+        };
+        assert_eq!(once, twice, "{}", f.display());
+    }
+}

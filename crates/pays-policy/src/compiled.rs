@@ -192,3 +192,184 @@ pub enum Atom {
     Text(String),
     Plane(Plane),
 }
+
+/// A canonical byte encoding of the compiled form (§9).
+///
+/// > The compiled form MUST be canonical: the same document compiles to byte-identical output
+/// > under the same resolver version. This is what makes a decision reproducible in a dispute.
+///
+/// It is what §12's `compiled_digest` is taken over, so a stable ordering is not a nicety: two
+/// engines that serialise the same charter differently produce different digests and reject
+/// each other's signatures.
+///
+/// Text rather than a packed binary, deliberately. It has to be diffed by a person during a
+/// dispute, and a line-oriented form is as deterministic as a binary one while remaining
+/// something an auditor can read. Every collection is emitted in a defined order and every
+/// number in decimal, so there is nothing left to a serialiser's discretion.
+pub fn encode(c: &Compiled) -> alloc::vec::Vec<u8> {
+    use core::fmt::Write;
+    let mut s = String::new();
+
+    let _ = writeln!(s, "charter {} {}", c.charter_id, c.version);
+    let _ = writeln!(s, "resolver {} {}", c.resolver_tier, c.resolver_version);
+    let _ = writeln!(s, "offset {}", c.timezone_offset);
+
+    let mut assets: alloc::vec::Vec<&AssetRecord> = c.assets.iter().collect();
+    assets.sort_by(|a, b| a.name.cmp(&b.name));
+    for a in assets {
+        let _ = writeln!(s, "asset {} {}", a.name, a.decimals);
+    }
+
+    let mut groups: alloc::vec::Vec<&(String, alloc::vec::Vec<String>)> =
+        c.asset_groups.iter().collect();
+    groups.sort_by(|a, b| a.0.cmp(&b.0));
+    for (g, members) in groups {
+        let mut m = members.clone();
+        m.sort();
+        let _ = writeln!(s, "asset_group {} {}", g, m.join(","));
+    }
+
+    let mut instruments = c.instruments.clone();
+    instruments.sort();
+    for i in instruments {
+        let _ = writeln!(s, "instrument {i}");
+    }
+
+    let mut prohibitions: alloc::vec::Vec<&Prohibition> = c.prohibitions.iter().collect();
+    prohibitions.sort_by(|a, b| a.id.cmp(&b.id));
+    for p in prohibitions {
+        let _ = writeln!(s, "prohibit {} {}", p.id, selector(&p.selector));
+    }
+
+    let mut limits: alloc::vec::Vec<&Limit> = c.limits.iter().collect();
+    limits.sort_by(|a, b| a.id.cmp(&b.id));
+    for l in limits {
+        let _ = writeln!(
+            s,
+            "limit {} {} {} {} {} {}",
+            l.id,
+            match l.dimension {
+                Dimension::Amount => "amount",
+                Dimension::Count => "count",
+            },
+            l.asset,
+            l.base,
+            window(&l.window),
+            scope(l.scope),
+        );
+        if let Some(a) = &l.applies {
+            let _ = writeln!(s, "  applies {}", selector(a));
+        }
+        // Exceptions are emitted in the order the compiler produced, which is source order
+        // after S4 has proved them disjoint: nothing about the meaning depends on it, and
+        // re-sorting here would hide a compiler that reordered them.
+        for (sel, v) in &l.exceptions {
+            let _ = writeln!(
+                s,
+                "  except {} {}",
+                match v {
+                    ExcValue::Value(n) => *n,
+                    ExcValue::Unlimited(n) => *n,
+                },
+                selector(sel)
+            );
+        }
+        for e in &l.escalations {
+            let _ = writeln!(
+                s,
+                "  escalate {} {} {} {} {}",
+                match e.trigger {
+                    Trigger::Above(v) => alloc::format!("above:{v}"),
+                    Trigger::AtLeast(v) => alloc::format!("atleast:{v}"),
+                    Trigger::WhenExhausted => String::from("exhausted"),
+                },
+                e.quorum,
+                e.approvers,
+                e.ceiling,
+                e.within,
+            );
+        }
+    }
+
+    let mut ceilings = c.ceiling_document.clone();
+    ceilings.sort_by(|a, b| a.0.cmp(&b.0));
+    for (asset, total) in ceilings {
+        let _ = writeln!(s, "ceiling {asset} {total}");
+    }
+
+    s.into_bytes()
+}
+
+fn window(w: &Window) -> String {
+    match w {
+        Window::Rolling { seconds } => alloc::format!("rolling:{seconds}"),
+        Window::Fixed { unit, offset } => alloc::format!(
+            "fixed:{}:{offset}",
+            match unit {
+                crate::calendar::CalUnit::Day => "day",
+                crate::calendar::CalUnit::Week => "week",
+                crate::calendar::CalUnit::Month => "month",
+                crate::calendar::CalUnit::Year => "year",
+            }
+        ),
+    }
+}
+
+fn scope(s: Scope) -> &'static str {
+    match s {
+        Scope::None => "-",
+        Scope::Account => "account",
+        Scope::Agent => "agent",
+        Scope::Instrument => "instrument",
+        Scope::Counterparty => "counterparty",
+    }
+}
+
+fn selector(s: &Selector) -> String {
+    match s {
+        Selector::And(a, b) => alloc::format!("(and {} {})", selector(a), selector(b)),
+        Selector::Or(a, b) => alloc::format!("(or {} {})", selector(a), selector(b)),
+        Selector::Not(a) => alloc::format!("(not {})", selector(a)),
+        Selector::Is { field, values, negated } => {
+            // Atoms were expanded from groups at compile time, so sorting them here makes the
+            // encoding independent of the order a group happened to list its members.
+            let mut vs: alloc::vec::Vec<String> = values.iter().map(atom).collect();
+            vs.sort();
+            alloc::format!(
+                "({} {} {})",
+                if *negated { "isnot" } else { "is" },
+                field_name(*field),
+                vs.join(",")
+            )
+        }
+        Selector::IsAtLeast { field, plane } => {
+            alloc::format!("(atleast {} {})", field_name(*field), plane.as_str())
+        }
+        Selector::Before { date } => alloc::format!("(before {date})"),
+        Selector::After { date } => alloc::format!("(after {date})"),
+    }
+}
+
+fn atom(a: &Atom) -> String {
+    match a {
+        Atom::Text(t) => t.clone(),
+        Atom::Plane(p) => String::from(p.as_str()),
+    }
+}
+
+fn field_name(f: Field) -> &'static str {
+    match f {
+        Field::Counterparty => "counterparty",
+        Field::Asset => "asset",
+        Field::AssetClass => "asset.class",
+        Field::Instrument => "instrument",
+        Field::MerchantCategory => "merchant.category",
+        Field::MerchantCountry => "merchant.country",
+        Field::Provenance => "provenance",
+        Field::ProvenanceRecipient => "provenance.recipient",
+        Field::ProvenanceAmount => "provenance.amount",
+        Field::ProvenanceAsset => "provenance.asset",
+        Field::ProvenanceVenue => "provenance.venue",
+        Field::Date => "date",
+    }
+}
