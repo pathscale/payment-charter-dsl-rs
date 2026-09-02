@@ -212,40 +212,89 @@ impl Parser {
         })
     }
 
-    /// A timezone is `tz-part { "/" tz-part }` (§2.9). The lexer emits the parts as
-    /// identifiers and the separators as `Slash`, so reassemble here — `Europe/London` is one
-    /// name, not a division.
+    /// A timezone is `UTC` with an optional fixed offset (§2.9). No IANA names and no
+    /// daylight saving: a boundary is arithmetic, so the enclave needs no database and a
+    /// signed charter cannot change meaning when somebody legislates a clock change.
+    ///
+    /// The lexer hands `UTC+10:00` back in pieces — the sign is not an identifier character —
+    /// so reassemble and validate here.
     fn timezone_text(&mut self) -> String {
-        let mut out = String::new();
-        loop {
-            match self.peek().cloned() {
-                Some(Tok::Ident(s)) => {
-                    self.i += 1;
-                    out.push_str(&s);
-                }
-                // Every tz-part is identifier-shaped, but some are reserved words in this
-                // language: `Asia/Qatar` is fine, `America/New_York` is fine, and a part that
-                // happens to collide with a keyword must still be accepted here.
-                Some(Tok::Kw(k)) if out.is_empty() || out.ends_with('/') => {
-                    self.i += 1;
-                    out.push_str(k);
-                }
-                _ => {
-                    if out.is_empty() {
-                        self.err("E206", "expected an IANA timezone name");
-                        return "UTC".into();
-                    }
-                    break;
-                }
-            }
-            if matches!(self.peek(), Some(Tok::Slash)) {
-                self.i += 1;
-                out.push('/');
-            } else {
-                break;
-            }
+        let span = self.span();
+        if let Some(Tok::Tz(tz)) = self.peek().cloned() {
+            self.i += 1;
+            return self.check_offset(&tz, span);
         }
-        out
+
+        let head = match self.peek().cloned() {
+            Some(Tok::Ident(s)) => {
+                self.i += 1;
+                s
+            }
+            _ => {
+                self.err("E206", "expected `UTC` or `UTC+HH:MM`");
+                return "UTC+00:00".into();
+            }
+        };
+
+        // An IANA name is the mistake worth naming, since it is what every other system takes.
+        if matches!(self.peek(), Some(Tok::Slash)) || head.contains('/') {
+            self.errors.push(Diagnostic::error(
+                "E206",
+                format!(
+                    "`{head}/…` is an IANA zone name. This language takes a fixed UTC offset — \
+                     `UTC+01:00` — because a window boundary must be arithmetic the enclave can \
+                     do without a database, and because a tzdata update must not change what an \
+                     already-signed charter means (§2.9)."
+                ),
+                span,
+            ));
+            while matches!(self.peek(), Some(Tok::Slash)) {
+                self.i += 1;
+                self.i += 1;
+            }
+            return "UTC+00:00".into();
+        }
+
+        if head != "UTC" {
+            self.errors.push(Diagnostic::error(
+                "E206",
+                format!("expected `UTC` or `UTC+HH:MM`, found `{head}`"),
+                span,
+            ));
+            return "UTC+00:00".into();
+        }
+
+        unreachable!("a UTC token is handled above")
+    }
+
+    /// Validate the offset the lexer already shaped: range and quarter-hour minutes (§2.9).
+    fn check_offset(&mut self, tz: &str, span: Span) -> String {
+        let Some(off) = tz.strip_prefix("UTC") else { return "UTC+00:00".into() };
+        if off.is_empty() {
+            return "UTC+00:00".into();
+        }
+        let sign = &off[..1];
+        let hh: i32 = off[1..3].parse().unwrap_or(0);
+        let mm: i32 = off[4..6].parse().unwrap_or(0);
+
+        if !matches!(mm, 0 | 15 | 30 | 45) {
+            self.errors.push(Diagnostic::error(
+                "E206",
+                format!("offset minutes are 00, 15, 30 or 45; found {mm:02}"),
+                span,
+            ));
+            return "UTC+00:00".into();
+        }
+        let total = if sign == "-" { -(hh * 60 + mm) } else { hh * 60 + mm };
+        if !(-12 * 60..=14 * 60).contains(&total) {
+            self.errors.push(Diagnostic::error(
+                "E206",
+                format!("an offset lies in -12:00 ..= +14:00; found {sign}{hh:02}:{mm:02}"),
+                span,
+            ));
+            return "UTC+00:00".into();
+        }
+        format!("UTC{sign}{hh:02}:{mm:02}")
     }
 
     fn decl(&mut self) -> Option<Decl> {

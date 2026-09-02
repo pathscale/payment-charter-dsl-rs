@@ -44,8 +44,12 @@ pub enum Tok {
     RParen,
     At,
     Dot,
-    /// Only ever appears inside a timezone name; references are single tokens.
+    /// Only reached by an IANA zone name, which §2.9 no longer takes; kept so that
+    /// mistake gets a diagnostic naming the replacement rather than a lexical error.
     Slash,
+    /// A whole timezone: `UTC` or `UTC+HH:MM` (§2.9). One token, because a sign and a
+    /// colon are otherwise three tokens that mean nothing on their own.
+    Tz(String),
 }
 
 #[derive(Clone, Debug)]
@@ -127,6 +131,14 @@ pub fn lex(src: &str) -> Result<Vec<Token>, LexError> {
             _ => None,
         } {
             out.push(t);
+            continue;
+        }
+
+        // A timezone is one token. Tried before identifiers so the sign and colon of an
+        // offset never become punctuation nobody can use.
+        if let Some(len) = tz_len(&src[i..]) {
+            out.push(Token { tok: Tok::Tz(src[i..i + len].to_string()), span: start..i + len });
+            i += len;
             continue;
         }
 
@@ -464,5 +476,64 @@ mod tests {
         // slip past S19's byte comparison.
         assert!(lex("asset USDС_circle = x").is_err(), "Cyrillic С is not an identifier char");
         assert!(lex("# Cyrillic С is fine in a comment\nlimit x").is_ok());
+    }
+}
+
+/// A timezone: `UTC` or `UTC±HH:MM` (§2.9). No zone names, no database, no daylight saving.
+///
+/// Matched as one token because a sign and a colon are meaningless separately here, and
+/// because `-` is an identifier character — `UTC-05` would otherwise be swallowed whole and
+/// `+10:00` would be an integer followed by punctuation nothing accepts.
+///
+/// Returns `None` for an identifier that merely starts with `UTC`, so an asset alias like
+/// `UTC_pool` is unaffected.
+fn tz_len(s: &str) -> Option<usize> {
+    let rest = s.strip_prefix("UTC")?;
+    let b = rest.as_bytes();
+
+    let offset = |b: &[u8]| -> Option<usize> {
+        if b.len() < 6 || !(b[0] == b'+' || b[0] == b'-') {
+            return None;
+        }
+        let ok = b[1].is_ascii_digit()
+            && b[2].is_ascii_digit()
+            && b[3] == b':'
+            && b[4].is_ascii_digit()
+            && b[5].is_ascii_digit();
+        ok.then_some(6)
+    };
+
+    let len = 3 + offset(b).unwrap_or(0);
+    // The token must end here: `UTC_pool` and `UTCX` are identifiers, not timezones.
+    if let Some(next) = s.as_bytes().get(len) {
+        let c = *next as char;
+        if c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '+' {
+            return None;
+        }
+    }
+    Some(len)
+}
+
+#[cfg(test)]
+mod tz_tests {
+    use super::*;
+
+    fn first(s: &str) -> Tok {
+        lex(s).unwrap().into_iter().next().unwrap().tok
+    }
+
+    #[test]
+    fn a_timezone_is_one_token() {
+        assert_eq!(first("UTC"), Tok::Tz("UTC".into()));
+        assert_eq!(first("UTC+10:00"), Tok::Tz("UTC+10:00".into()));
+        assert_eq!(first("UTC-05:00"), Tok::Tz("UTC-05:00".into()));
+        assert_eq!(first("UTC+05:45"), Tok::Tz("UTC+05:45".into()));
+    }
+
+    #[test]
+    fn an_identifier_starting_with_utc_is_not_a_timezone() {
+        // `-` is an identifier character, so `UTC-05` would otherwise be swallowed whole.
+        assert_eq!(first("UTC_pool"), Tok::Ident("UTC_pool".into()));
+        assert_eq!(first("UTCX"), Tok::Ident("UTCX".into()));
     }
 }
