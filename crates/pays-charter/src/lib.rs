@@ -7,12 +7,14 @@
 #![forbid(unsafe_code)]
 
 pub mod ast;
+pub mod compile;
 pub mod diag;
 pub mod lex;
 pub mod parse;
 pub mod rules;
 
 pub use diag::{Diagnostic, Severity};
+pub use compile::{compile, Resolver};
 pub use parse::parse;
 
 /// Parse and apply the static rules. Errors and warnings come back together; a caller that
