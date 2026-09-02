@@ -44,6 +44,8 @@ pub enum Tok {
     RParen,
     At,
     Dot,
+    /// Only ever appears inside a timezone name; references are single tokens.
+    Slash,
 }
 
 #[derive(Clone, Debug)]
@@ -121,6 +123,7 @@ pub fn lex(src: &str) -> Result<Vec<Token>, LexError> {
             '(' => single(Tok::LParen, &mut i),
             ')' => single(Tok::RParen, &mut i),
             '@' => single(Tok::At, &mut i),
+            '/' => single(Tok::Slash, &mut i),
             _ => None,
         } {
             out.push(t);
@@ -135,6 +138,18 @@ pub fn lex(src: &str) -> Result<Vec<Token>, LexError> {
         }
 
         if c.is_ascii_digit() {
+            // An address may begin with a digit — base58 admits `3n1LSbDq…` — so measure the
+            // whole alphanumeric run before deciding this is a number. Getting this wrong
+            // silently truncates an address into an integer followed by a name.
+            let mut j = i;
+            while j < b.len() && (b[j] as char).is_ascii_alphanumeric() {
+                j += 1;
+            }
+            if is_addr(&src[i..j]) {
+                out.push(Token { tok: Tok::Addr(src[i..j].to_string()), span: start..j });
+                i = j;
+                continue;
+            }
             let (tok, len) = lex_number(&src[i..], start)?;
             out.push(Token { tok, span: start..i + len });
             i += len;
@@ -148,6 +163,13 @@ pub fn lex(src: &str) -> Result<Vec<Token>, LexError> {
                 let ch = b[j] as char;
                 if ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' {
                     j += 1;
+                } else if ch == '.'
+                    && b.get(j + 1).is_some_and(|n| (*n as char).is_ascii_alphabetic())
+                {
+                    // A dotted field name is one token: merchant.category, asset.class,
+                    // provenance.recipient. A declaration name may not contain a dot, which
+                    // the parser checks where names are bound.
+                    j += 2;
                 } else {
                     break;
                 }
@@ -262,7 +284,7 @@ fn multi_len_opt(src: &str, at: usize, phrase: &str) -> Option<usize> {
 
 /// A reference token, recognised by its scheme or by the CAIP-19 shape.
 fn reference_len(s: &str) -> Option<usize> {
-    let schemes = ["mint://", "unit://", "asset://"];
+    let schemes = ["mint://", "unit://", "asset://", "card://", "wallet://"];
     let is_scheme = schemes.iter().any(|p| s.starts_with(p));
     let is_caip19 = {
         // `<ns>:<ref>/<asset-ns>:<asset-ref>` — a colon before a slash, and no `//`.
