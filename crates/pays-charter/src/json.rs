@@ -48,8 +48,8 @@ impl Json {
 pub fn parse(s: &str) -> Json {
     let b: Vec<char> = s.chars().collect();
     let mut i = 0;
-    let v = value(&b, &mut i);
-    v
+    
+    value(&b, &mut i)
 }
 
 fn skip_ws(b: &[char], i: &mut usize) {
