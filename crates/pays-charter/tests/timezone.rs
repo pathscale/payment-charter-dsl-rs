@@ -36,11 +36,9 @@ fn out_of_range_and_odd_minutes_are_rejected() {
 
 #[test]
 fn a_window_may_override_the_charter_offset() {
-    let src = format!(
-        "charter t version 1\nresolver common@41\ntimezone UTC\n\n  \
+    let src = "charter t version 1\nresolver common@41\ntimezone UTC\n\n  \
          asset USDC_solana = mint://USDC/Circle/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v/solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp\n\n  \
-         limit spend\n    amount 100.00 USDC_solana\n    per fixed day in UTC+10:00\n"
-    );
+         limit spend\n    amount 100.00 USDC_solana\n    per fixed day in UTC+10:00\n".to_string();
     assert!(pays_charter::check(&src).is_ok());
 }
 

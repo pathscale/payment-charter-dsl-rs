@@ -305,7 +305,7 @@ fn reference_len(s: &str) -> Option<usize> {
         !head.contains("://")
             && head.matches('/').count() == 1
             && head.matches(':').count() == 2
-            && head.find(':').map_or(false, |c| head.find('/').map_or(false, |sl| c < sl))
+            && head.find(':').is_some_and(|c| head.find('/').is_some_and(|sl| c < sl))
     };
     if !is_scheme && !is_caip19 {
         return None;
