@@ -278,6 +278,13 @@ fn hierarchy_vectors() {
         return;
     };
     let dir = root.join("hierarchy");
+    // A corpus predating §8A has no hierarchy fixtures at all, which is a corpus too old for
+    // this suite rather than a failure of it. An *empty* directory still fails below: that is
+    // fixtures having been removed, which is a different thing and not one to pass over.
+    if !dir.is_dir() {
+        eprintln!("corpus has no hierarchy/ fixtures; skipping");
+        return;
+    }
     let mut files: Vec<_> = std::fs::read_dir(&dir)
         .unwrap()
         .filter_map(|e| e.ok().map(|e| e.path()))

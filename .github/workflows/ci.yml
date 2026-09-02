@@ -22,14 +22,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # actions/checkout refuses a path outside GITHUB_WORKSPACE, so the corpus lives inside
-      # it and the harnesses are pointed at it by environment variable rather than by
+      # The corpus lives inside GITHUB_WORKSPACE because actions/checkout refuses a path
+      # outside it, and the harnesses are pointed at it by environment variable rather than by
       # reproducing a directory layout with symlinks.
+      #
+      # A corpus branch of the same name is preferred when one exists. The spec and the
+      # implementation are separate repositories, so a change that adds a rule and the fixtures
+      # proving it is two pull requests, and testing the new rule against the old corpus tests
+      # nothing. Falling back to the default branch is what keeps this working for the ordinary
+      # change that adds no fixtures.
       - name: Checkout the spec and corpus
-        uses: actions/checkout@v4
-        with:
-          repository: pathscale/payment-charter-dsl
-          path: siblings/payment-charter-dsl
+        run: |
+          repo=https://github.com/pathscale/payment-charter-dsl
+          branch="${{ github.head_ref }}"
+          if [ -n "$branch" ] && git clone --depth 1 --branch "$branch" "$repo" siblings/payment-charter-dsl 2>/dev/null; then
+            echo "corpus: $branch"
+          else
+            git clone --depth 1 "$repo" siblings/payment-charter-dsl
+            echo "corpus: default branch"
+          fi
 
       - uses: dtolnay/rust-toolchain@stable
         with:
