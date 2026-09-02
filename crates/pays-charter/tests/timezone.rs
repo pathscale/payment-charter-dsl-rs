@@ -43,3 +43,27 @@ fn a_window_may_override_the_charter_offset() {
     );
     assert!(pays_charter::check(&src).is_ok());
 }
+
+#[test]
+fn the_boundary_offsets_are_the_boundary() {
+    // +14:00 and -12:00 are real offsets and must pass; one quarter-hour past either must not.
+    assert!(pays_charter::check(&charter("UTC+14:00")).is_ok());
+    assert!(pays_charter::check(&charter("UTC-12:00")).is_ok());
+    for over in ["UTC+14:15", "UTC-12:15", "UTC+15:00", "UTC-13:00", "UTC+99:00"] {
+        let errs = pays_charter::check(&charter(over)).unwrap_err();
+        let e = errs.iter().find(|e| e.code == "E206").unwrap_or_else(|| panic!("{over}: {errs:?}"));
+        assert!(e.message.contains("-12:00 ..= +14:00"), "{over}: {}", e.message);
+    }
+}
+
+#[test]
+fn a_malformed_offset_is_an_offset_error_not_a_lexical_one() {
+    // The near misses. An earlier version let these fall out of the timezone token entirely
+    // and reported "unexpected character '+'", which diagnoses the wrong thing and leaves the
+    // shape rule enforced by a token failing to match.
+    for near in ["UTC+1:00", "UTC+5:45", "UTC+0100", "UTC+10:0", "UTC+:00"] {
+        let errs = pays_charter::check(&charter(near)).unwrap_err();
+        let e = errs.iter().find(|e| e.code == "E206").unwrap_or_else(|| panic!("{near}: {errs:?}"));
+        assert!(e.message.contains("two digits"), "{near}: {}", e.message);
+    }
+}

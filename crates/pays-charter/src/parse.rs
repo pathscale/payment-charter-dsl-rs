@@ -267,12 +267,38 @@ impl Parser {
         unreachable!("a UTC token is handled above")
     }
 
-    /// Validate the offset the lexer already shaped: range and quarter-hour minutes (§2.9).
+    /// The whole offset rule, in one place: shape, range and quarter-hour minutes (§2.9).
+    ///
+    /// The lexer decides only where the token ends. Everything wrong with an offset — a
+    /// missing digit, a missing colon, a value out of range — is E206 from here, so a near
+    /// miss like `UTC+1:00` is diagnosed as the offset it obviously meant to be rather than
+    /// as an unexpected character.
     fn check_offset(&mut self, tz: &str, span: Span) -> String {
         let Some(off) = tz.strip_prefix("UTC") else { return "UTC+00:00".into() };
         if off.is_empty() {
             return "UTC+00:00".into();
         }
+
+        let b = off.as_bytes();
+        let shaped = b.len() == 6
+            && (b[0] == b'+' || b[0] == b'-')
+            && b[1].is_ascii_digit()
+            && b[2].is_ascii_digit()
+            && b[3] == b':'
+            && b[4].is_ascii_digit()
+            && b[5].is_ascii_digit();
+        if !shaped {
+            self.errors.push(Diagnostic::error(
+                "E206",
+                format!(
+                    "an offset is `+HH:MM` or `-HH:MM`, two digits each side of the colon; \
+                     found `{off}`"
+                ),
+                span,
+            ));
+            return "UTC+00:00".into();
+        }
+
         let sign = &off[..1];
         let hh: i32 = off[1..3].parse().unwrap_or(0);
         let mm: i32 = off[4..6].parse().unwrap_or(0);

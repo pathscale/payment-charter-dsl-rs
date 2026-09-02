@@ -487,27 +487,36 @@ mod tests {
 ///
 /// Returns `None` for an identifier that merely starts with `UTC`, so an asset alias like
 /// `UTC_pool` is unaffected.
+///
+/// The lexer decides only **where the token ends**, never whether it is well formed. Once a
+/// sign follows `UTC` this is a timezone, and every complaint about it — wrong digit count,
+/// missing colon, out of range, odd minutes — is one E206 from [`check_offset`].
+///
+/// The alternative, tried first, was to match only the exact shape and let anything else fall
+/// through. `UTC+1:00` then reached the punctuation matcher and produced "unexpected character
+/// `+`": a lexical error for an obvious typo, and a shape rule enforced by a token failing to
+/// match rather than by anything a reader could find in the spec.
 fn tz_len(s: &str) -> Option<usize> {
     let rest = s.strip_prefix("UTC")?;
     let b = rest.as_bytes();
 
-    let offset = |b: &[u8]| -> Option<usize> {
-        if b.len() < 6 || !(b[0] == b'+' || b[0] == b'-') {
-            return None;
+    let len = match b.first() {
+        // A sign commits this to being a timezone. Take the whole offset-shaped run and let
+        // the parser say what is wrong with it.
+        Some(b'+') | Some(b'-') => {
+            let mut n = 1;
+            while n < b.len() && (b[n].is_ascii_digit() || b[n] == b':') {
+                n += 1;
+            }
+            3 + n
         }
-        let ok = b[1].is_ascii_digit()
-            && b[2].is_ascii_digit()
-            && b[3] == b':'
-            && b[4].is_ascii_digit()
-            && b[5].is_ascii_digit();
-        ok.then_some(6)
+        _ => 3,
     };
 
-    let len = 3 + offset(b).unwrap_or(0);
-    // The token must end here: `UTC_pool` and `UTCX` are identifiers, not timezones.
+    // Bare `UTC` must still end here: `UTC_pool` and `UTCX` are identifiers.
     if let Some(next) = s.as_bytes().get(len) {
         let c = *next as char;
-        if c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '+' {
+        if c.is_ascii_alphanumeric() || c == '_' || c == '-' {
             return None;
         }
     }
