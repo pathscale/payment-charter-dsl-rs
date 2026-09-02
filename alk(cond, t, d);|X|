@@ -1,0 +1,2 @@
+        cond: &Condition, d: &mut Vec<Diagnostic>|v: &Spanned<Value>, d: &mut Vec<Diagnostic>| {
+cond: &Condition, d: &mut Vec<Diagnostic>|cond: &Condition, d: &mut Vec<Diagnostic>| walk(cond, t, d);

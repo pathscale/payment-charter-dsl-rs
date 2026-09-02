@@ -17,7 +17,7 @@
 //! into the enclave for them costs more than it saves.
 
 use alloc::format;
-use alloc::string::{String, ToString};
+use alloc::string::String;
 use alloc::vec::Vec;
 
 /// The signed payload (§12.3). Serialised with JCS (RFC 8785) and signed.
