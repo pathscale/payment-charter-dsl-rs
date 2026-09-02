@@ -17,10 +17,12 @@ use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::vec::Vec;
 
+pub mod authenticity;
 pub mod calendar;
 pub mod compiled;
 pub mod eval;
 
+pub use authenticity::{sha256, AuthError, Commitment, Verifier, VersionStore};
 pub use compiled::*;
 pub use eval::{Decision, Engine, Outcome, Request};
 
