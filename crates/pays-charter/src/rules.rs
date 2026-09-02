@@ -669,7 +669,7 @@ fn field_row(field: &str) -> Option<(&'static [&'static str], &'static [&'static
 }
 
 /// §6 and §2.11, over every condition in the document.
-pub(crate) fn s_type_table(c: &Charter, t: &HashMap<String, Entry>, d: &mut Vec<Diagnostic>) {
+fn s_type_table(c: &Charter, t: &HashMap<String, Entry>, d: &mut Vec<Diagnostic>) {
     let mut visit = |cond: &Condition, d: &mut Vec<Diagnostic>| walk(cond, t, d);
     for decl in &c.decls {
         match decl {
