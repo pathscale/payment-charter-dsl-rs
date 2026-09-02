@@ -25,20 +25,28 @@ jobs:
       # The corpus lives inside GITHUB_WORKSPACE because actions/checkout refuses a path
       # outside it, and the harnesses are pointed at it by environment variable rather than by
       # reproducing a directory layout with symlinks.
-      #
+      - name: Checkout the spec and corpus
+        uses: actions/checkout@v4
+        with:
+          repository: pathscale/payment-charter-dsl
+          path: siblings/payment-charter-dsl
+
       # A corpus branch of the same name is preferred when one exists. The spec and the
       # implementation are separate repositories, so a change that adds a rule and the fixtures
       # proving it is two pull requests, and testing the new rule against the old corpus tests
       # nothing. Falling back to the default branch is what keeps this working for the ordinary
       # change that adds no fixtures.
-      - name: Checkout the spec and corpus
+      #
+      # Fetched from inside the checkout rather than cloned afresh, so it reuses the
+      # credentials actions/checkout configured. A bare `git clone` has none.
+      - name: Prefer a corpus branch matching this one
+        working-directory: siblings/payment-charter-dsl
         run: |
-          repo=https://github.com/pathscale/payment-charter-dsl
           branch="${{ github.head_ref }}"
-          if [ -n "$branch" ] && git clone --depth 1 --branch "$branch" "$repo" siblings/payment-charter-dsl 2>/dev/null; then
+          if [ -n "$branch" ] && git fetch --depth 1 origin "$branch" 2>/dev/null; then
+            git checkout --detach FETCH_HEAD
             echo "corpus: $branch"
           else
-            git clone --depth 1 "$repo" siblings/payment-charter-dsl
             echo "corpus: default branch"
           fi
 
