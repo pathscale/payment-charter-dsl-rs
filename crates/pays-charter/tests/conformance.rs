@@ -134,3 +134,48 @@ fn reject_fixtures_report_the_right_code() {
     }
     assert!(wrong.is_empty(), "wrong error code:\n  {}", wrong.join("\n  "));
 }
+
+/// `type-table/`: §6's field × operator cross product, generated rather than hand-written.
+///
+/// Most of the 84 combinations are invalid and must produce E301. A file with an `# expect:`
+/// line is one of those; a file without one must compile. Generating them is the point — a
+/// hand-written sample of a cross product tests the cells somebody thought of.
+#[test]
+fn type_table_cross_product() {
+    let Some(root) = corpus() else { return };
+    let dir = root.join("type-table");
+    if !dir.is_dir() {
+        return;
+    }
+    let files = charters(&dir);
+    assert!(files.len() >= 80, "expected the full cross product, found {}", files.len());
+
+    let mut failures = Vec::new();
+    let (mut accepted, mut rejected) = (0, 0);
+    for f in files {
+        let src = std::fs::read_to_string(&f).unwrap();
+        let name = f.file_name().unwrap().to_string_lossy().to_string();
+        let want = expected_code(&src);
+        let got = pays_charter::check(&src);
+        match (&want, &got) {
+            (None, Ok(_)) => accepted += 1,
+            (None, Err(e)) => failures.push(format!(
+                "{name}: should compile, got {}",
+                e.iter().map(|d| d.code).collect::<Vec<_>>().join(", ")
+            )),
+            (Some(code), Err(e)) => {
+                if e.iter().any(|d| d.code == code) {
+                    rejected += 1;
+                } else {
+                    failures.push(format!(
+                        "{name}: wanted {code}, got {}",
+                        e.iter().map(|d| d.code).collect::<Vec<_>>().join(", ")
+                    ));
+                }
+            }
+            (Some(code), Ok(_)) => failures.push(format!("{name}: wanted {code}, but it compiled")),
+        }
+    }
+    eprintln!("type table: {accepted} accepted, {rejected} rejected");
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}

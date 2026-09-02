@@ -16,6 +16,7 @@ pub fn check(c: &Charter) -> Vec<Diagnostic> {
     let mut d = Vec::new();
     let table = build_table(c, &mut d);
     s21_s28_names(c, &table, &mut d);
+    s_type_table(c, &table, &mut d);
     s19_s20_asset_names(c, &mut d);
     s22_asset_groups(c, &table, &mut d);
     s26_s27_instruments(c, &mut d);
@@ -636,5 +637,162 @@ fn w3_unused_assets(c: &Charter, _t: &HashMap<String, Entry>, d: &mut Vec<Diagno
                 span.clone(),
             ));
         }
+    }
+}
+
+/// §6's type table: each field admits a fixed set of operators and value shapes, and anything
+/// else is a type error (E301). The tag of a literal must match the field too (E303).
+///
+/// The table is the enumeration itself rather than a set of special cases, so adding a field
+/// means adding a row and nothing else — which is what keeps the vocabulary closed (S2).
+fn field_row(field: &str) -> Option<(&'static [&'static str], &'static [&'static str])> {
+    // (operators, permitted value shapes)
+    const SET: &[&str] = &["is", "is not", "in", "not in"];
+    const SET_ORDERED: &[&str] = &["is", "is not", "in", "not in", "is at least"];
+    const DATE_OPS: &[&str] = &["before", "after"];
+    Some(match field {
+        "counterparty" => (SET, &["address", "group"]),
+        "asset" => (SET, &["asset", "asset_group"]),
+        "asset.class" => (SET, &["class"]),
+        "instrument" => (SET, &["instrument"]),
+        "merchant.category" => (SET, &["mcc", "group"]),
+        "merchant.country" => (SET, &["country", "group"]),
+        "provenance"
+        | "provenance.recipient"
+        | "provenance.amount"
+        | "provenance.asset"
+        | "provenance.venue" => (SET_ORDERED, &["plane"]),
+        "date" => (DATE_OPS, &["date"]),
+        _ => return None,
+    })
+}
+
+/// §6 and §2.11, over every condition in the document.
+pub(crate) fn s_type_table(c: &Charter, t: &HashMap<String, Entry>, d: &mut Vec<Diagnostic>) {
+    let mut visit = |cond: &Condition, d: &mut Vec<Diagnostic>| walk(cond, t, d);
+    for decl in &c.decls {
+        match decl {
+            Decl::Prohibit(p) => visit(&p.condition, d),
+            Decl::Limit(l) => {
+                if let Some(a) = &l.applies {
+                    visit(a, d);
+                }
+                for e in exceptions(l) {
+                    visit(&e.condition, d);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn walk(c: &Condition, t: &HashMap<String, Entry>, d: &mut Vec<Diagnostic>) {
+    match c {
+        Condition::And(a, b) | Condition::Or(a, b) => {
+            walk(a, t, d);
+            walk(b, t, d);
+        }
+        Condition::Not(a) => walk(a, t, d),
+        Condition::Compare(cmp) => {
+            let Some((ops, shapes)) = field_row(&cmp.field.node) else {
+                d.push(Diagnostic::error(
+                    "E301",
+                    format!(
+                        "`{}` is not a field. §6's set is closed, and adding one is an engine \
+                         change under review rather than something an author can do (S2).",
+                        cmp.field.node
+                    ),
+                    cmp.field.span.clone(),
+                ));
+                return;
+            };
+            if !ops.contains(&cmp.operator.node.as_str()) {
+                d.push(Diagnostic::error(
+                    "E301",
+                    format!(
+                        "`{}` does not take `{}`; it takes {}.",
+                        cmp.field.node,
+                        cmp.operator.node,
+                        ops.join(", ")
+                    ),
+                    cmp.operator.span.clone(),
+                ));
+                return;
+            }
+            // `is`/`is not` take one value; `in`/`not in` take a group or an inline set.
+            let is_membership = matches!(cmp.operator.node.as_str(), "in" | "not in");
+            if is_membership && !matches!(cmp.value.node, Value::Set(_) | Value::Named(_)) {
+                d.push(Diagnostic::error(
+                    "E301",
+                    format!("`{}` takes a group or an inline set", cmp.operator.node),
+                    cmp.value.span.clone(),
+                ));
+                return;
+            }
+            check_shape(&cmp.value, &cmp.field.node, shapes, t, d);
+        }
+    }
+}
+
+fn check_shape(
+    v: &Spanned<Value>,
+    field: &str,
+    shapes: &[&str],
+    t: &HashMap<String, Entry>,
+    d: &mut Vec<Diagnostic>,
+) {
+    match &v.node {
+        Value::Set(items) => {
+            for i in items {
+                check_shape(i, field, shapes, t, d);
+            }
+        }
+        Value::Plane(_) => require(shapes, "plane", field, "a provenance plane", &v.span, d),
+        Value::Date(_) => require(shapes, "date", field, "a date", &v.span, d),
+        Value::Literal(Literal::Address(_)) => {
+            require(shapes, "address", field, "an address", &v.span, d)
+        }
+        Value::Literal(Literal::Tagged(tag, _)) => {
+            if !shapes.contains(&tag.as_str()) {
+                d.push(Diagnostic::error(
+                    "E303",
+                    format!(
+                        "`{field}` does not take a `{tag}:` literal. Each tag belongs to exactly \
+                         one field: mcc to merchant.category, country to merchant.country, class \
+                         to asset.class (§2.11)."
+                    ),
+                    v.span.clone(),
+                ));
+            }
+        }
+        Value::Named(n) => {
+            // A name's kind is checked by S28; here only whether a *group* is admissible at
+            // all for this field, so the two rules do not report the same mistake twice.
+            let kind = t.get(n).map(|e| e.kind);
+            if kind == Some(Kind::Group) && !shapes.contains(&"group") {
+                d.push(Diagnostic::error(
+                    "E303",
+                    format!("`{field}` does not take a group"),
+                    v.span.clone(),
+                ));
+            }
+        }
+    }
+}
+
+fn require(
+    shapes: &[&str],
+    shape: &str,
+    field: &str,
+    described: &str,
+    span: &Span,
+    d: &mut Vec<Diagnostic>,
+) {
+    if !shapes.contains(&shape) {
+        d.push(Diagnostic::error(
+            "E301",
+            format!("`{field}` does not take {described}"),
+            span.clone(),
+        ));
     }
 }
