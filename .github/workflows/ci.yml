@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    runs-on: ubicloud-standard-2
+    env:
+      # The conformance suite is the shared corpus in the spec repo, not local tests. Without
+      # this the harnesses fall back to a sibling path, find nothing, and skip — reporting
+      # green for a run that checked no fixtures at all.
+      CHARTER_CORPUS: ${{ github.workspace }}/siblings/payment-charter-dsl/conformance
+    steps:
+      - uses: actions/checkout@v4
+
+      # actions/checkout refuses a path outside GITHUB_WORKSPACE, so the corpus lives inside
+      # it and the harnesses are pointed at it by environment variable rather than by
+      # reproducing a directory layout with symlinks.
+      - name: Checkout the spec and corpus
+        uses: actions/checkout@v4
+        with:
+          repository: pathscale/payment-charter-dsl
+          path: siblings/payment-charter-dsl
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build --workspace --all-targets
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Test
+        run: cargo test --workspace
+
+      # pays-policy links into the enclave, so its two invariants are worth asserting in CI
+      # rather than in a comment: it must build with no dependencies at all, and it must build
+      # for a target with no standard library. A dependency added by accident fails here.
+      - name: pays-policy has no dependencies
+        run: |
+          deps=$(cargo tree -p pays-policy --edges normal --prefix none | tail -n +2 | sort -u)
+          if [ -n "$deps" ]; then
+            echo "pays-policy must be dependency-free; found:"
+            echo "$deps"
+            exit 1
+          fi
+
+      - name: pays-policy builds for no_std
+        run: |
+          rustup target add thumbv7em-none-eabi
+          cargo build -p pays-policy --target thumbv7em-none-eabi
