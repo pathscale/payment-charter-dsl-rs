@@ -2,9 +2,9 @@
 //!
 //! **Dependency-free, and it never parses text.** This is the half the enclave links, and the
 //! crate split exists so that is true by construction rather than by discipline. It takes a
-//! compiled charter (§9) and nothing else; `text_digest` is opaque bytes to it (§12.3).
+//! compiled charter (Â§9) and nothing else; `text_digest` is opaque bytes to it (Â§12.3).
 //!
-//! The model is petty cash (§8.1): a limit's allowance is drawn down when a payment is
+//! The model is petty cash (Â§8.1): a limit's allowance is drawn down when a payment is
 //! committed to, not when it settles. Reserving something that never broadcasts overcounts,
 //! which costs liveness and never costs safety. That trade is deliberate.
 
@@ -21,12 +21,14 @@ pub mod authenticity;
 pub mod calendar;
 pub mod compiled;
 pub mod eval;
+pub mod hierarchy;
 
 pub use authenticity::{sha256, AuthError, Commitment, Verifier, VersionStore};
 pub use compiled::*;
 pub use eval::{Decision, Engine, Outcome, Request};
+pub use hierarchy::{Chain, ChainDiagnostic, Severity};
 
-/// The provenance planes, ordered by increasing taint (§6.1).
+/// The provenance planes, ordered by increasing taint (Â§6.1).
 ///
 /// An intent is exactly as trustworthy as its worst field, so bare `provenance` is the maximum
 /// over the four dotted forms.
@@ -62,18 +64,24 @@ impl Plane {
 /// A window instance: the identity of the accounting period a payment belongs to.
 ///
 /// Keyed by the wall-clock interval it covers, **not** by the charter version that created it
-/// (§8.4A). That is the whole of "an edit changes the ceiling, never the meter": installing a
+/// (Â§8.4A). That is the whole of "an edit changes the ceiling, never the meter": installing a
 /// new version re-points limits at new ceilings and leaves every accumulator where it was.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct WindowInstance(pub i64);
 
-/// What an accumulator is keyed by (§8.1.1).
+/// What an accumulator is keyed by (Â§8.1.1), plus the level that owns it (Â§8A H2).
 ///
-/// `asset` is the name the limit declares — an `asset` or an `asset group` — and never a
+/// `asset` is the name the limit declares â an `asset` or an `asset group` â and never a
 /// `(chain, mint_id)` pair, which is what gives an asset group one accumulator across its
 /// members.
+///
+/// `level` is the declaring charter's id, not its index in the chain. A charter id is stable
+/// across versions (E506 enforces it) and across re-rooting, so an accumulator survives an
+/// install for the same reason `window` does: an edit changes the ceiling, never the meter.
+/// Indices would not â inserting a level above would silently reset every meter below it.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct AccumulatorKey {
+    pub level: String,
     pub limit_id: String,
     pub scope_value: String,
     pub asset: String,
@@ -85,18 +93,25 @@ pub struct AccumulatorKey {
 pub struct Reservation {
     pub id: u64,
     pub at: i64,
+    /// What this reservation draws: minor units for an `amount` limit, and exactly 1 for a
+    /// `count`, which meters attempts rather than money.
     pub amount: u64,
     pub state: ReservationState,
+    /// False for a `count` (§8.1.3): a rate is consumed on attempt and never returned, and an
+    /// agent whose every payment fails would otherwise retry without bound — which is the case
+    /// the control exists for. Recorded here rather than left to the caller, because a caller
+    /// holding a decision's reservation ids has no way to tell which is which.
+    pub releasable: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ReservationState {
     /// Debited. Exposure is counted from here, strictly before any signature exists.
     Reserved,
-    /// Awaiting a quorum. It still holds its reservation — otherwise thirty approvals queue
-    /// under the ceiling and release together (§8.1.5).
+    /// Awaiting a quorum. It still holds its reservation â otherwise thirty approvals queue
+    /// under the ceiling and release together (Â§8.1.5).
     PendingApproval { expires_at: i64 },
-    /// Released on **proof of death**, never on a timeout (§8.1.4).
+    /// Released on **proof of death**, never on a timeout (Â§8.1.4).
     Released,
     Settled,
 }
@@ -141,21 +156,35 @@ impl Ledger {
             .unwrap_or(0)
     }
 
-    fn push(&mut self, key: AccumulatorKey, at: i64, amount: u64, state: ReservationState) -> u64 {
+    fn push(
+        &mut self,
+        key: AccumulatorKey,
+        at: i64,
+        amount: u64,
+        state: ReservationState,
+        releasable: bool,
+    ) -> u64 {
         self.next_id += 1;
         let id = self.next_id;
-        self.entries.entry(key).or_default().push(Reservation { id, at, amount, state });
+        self.entries
+            .entry(key)
+            .or_default()
+            .push(Reservation { id, at, amount, state, releasable });
         id
     }
 
     /// Release by id. Callers reach this only on terminal evidence that the money cannot move
-    /// — on Solana, blockhash expiry (§8.1.4). It is not a timer.
+    /// â on Solana, blockhash expiry (Â§8.1.4). It is not a timer.
+    /// Returns whether the reservation is now released. A `count` reservation answers `false`
+    /// and is left alone: §8.1.3 gives no evidence that returns a rate, so this is refused
+    /// structurally rather than documented as something a caller must remember.
     pub fn release(&mut self, id: u64) -> bool {
         for rs in self.entries.values_mut() {
             for r in rs.iter_mut() {
                 if r.id == id {
-                    // A `count` is consumed on attempt and never released, so the caller must
-                    // not route count reservations here; the engine keeps them separate.
+                    if !r.releasable {
+                        return false;
+                    }
                     r.state = ReservationState::Released;
                     return true;
                 }
@@ -176,7 +205,7 @@ impl Ledger {
         false
     }
 
-    /// Expire pending approvals whose `within` has elapsed. §8.1.5: on expiry the reservation
+    /// Expire pending approvals whose `within` has elapsed. Â§8.1.5: on expiry the reservation
     /// is released and the request is denied.
     pub fn expire_pending(&mut self, now: i64) -> Vec<u64> {
         let mut expired = Vec::new();
@@ -198,7 +227,7 @@ impl Ledger {
     }
 }
 
-/// The executable statement of the invariant (§8.5).
+/// The executable statement of the invariant (Â§8.5).
 ///
 /// > No execution releases signatures whose aggregate exposure exceeds the charter's limits
 /// > over any window, **absent explicit human authorization of the exact payment digest.**
@@ -207,22 +236,40 @@ impl Ledger {
 /// unaccompanied, and every escalation names a finite ceiling, so the human-authorized path is
 /// bounded by a literal too.
 pub fn check_invariant(compiled: &Compiled, ledger: &Ledger) -> Result<(), String> {
+    check_invariant_chain(&crate::hierarchy::Chain::single(compiled), ledger)
+}
+
+/// The same statement over a chain (Â§8A H2).
+///
+/// A chain-aware check is not a convenience. Every level owns accumulators, and a check that
+/// knew only the leaf would find no declaration for an ancestor's key, take it for a limit
+/// retired under Â§8.4A.2, and skip it â reporting that a company-wide ceiling holds precisely
+/// because it never looked at it.
+pub fn check_invariant_chain(
+    chain: &crate::hierarchy::Chain<'_>,
+    ledger: &Ledger,
+) -> Result<(), String> {
     for key in ledger.keys() {
-        let Some(limit) = compiled.limits.iter().find(|l| l.id == key.limit_id) else {
-            // A superseded limit keeps enforcing until its window closes (§8.4A.2), so its
+        let found = chain
+            .depth_of(&key.level)
+            .and_then(|d| chain.levels()[d].limits.iter().find(|l| l.id == key.limit_id).map(|l| (d, l)));
+        let Some((depth, limit)) = found else {
+            // A superseded limit keeps enforcing until its window closes (Â§8.4A.2), so its
             // accumulator outliving its declaration is expected, not a violation.
             continue;
         };
-        let ceiling = limit.autonomous_ceiling();
-        let escalated = limit.escalated_ceiling();
+        // The chain's number, not the document's: H4 lets `unlimited` resolve above anything
+        // written here.
+        let ceiling = chain.static_ceiling(depth, limit);
         let used = ledger.exposure(key);
-        if used > escalated.max(ceiling) as u128 {
+        if used > ceiling as u128 {
             return Err(alloc::format!(
-                "{} over {}: {} used against a ceiling of {}",
+                "{} at {} over {}: {} used against a ceiling of {}",
                 key.limit_id,
+                key.level,
                 key.scope_value,
                 used,
-                escalated.max(ceiling)
+                ceiling
             ));
         }
     }
