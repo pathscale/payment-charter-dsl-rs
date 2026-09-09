@@ -5,7 +5,9 @@
 use pays_policy::authenticity::{hex, jcs, sha256, Commitment};
 
 fn main() {
-    let out = std::env::args().nth(1).expect("usage: gen-auth-fixtures <dir>");
+    let out = std::env::args()
+        .nth(1)
+        .expect("usage: gen-auth-fixtures <dir>");
     let compiled = b"compiled bytes for acme-treasury v7".to_vec();
     let base = Commitment {
         charter: "acme-treasury".into(),
@@ -18,34 +20,53 @@ fn main() {
     };
     let good_sig = sha256(jcs(&base).as_bytes());
 
-    let render = |name: &str, desc: &str, c: &Commitment, sig: &[u8], compiled: &[u8],
-                  installing: &str, now: i64, keys: &str, highest: &str, expect: &str| {
+    let render = |name: &str,
+                  desc: &str,
+                  c: &Commitment,
+                  sig: &[u8],
+                  compiled: &[u8],
+                  installing: &str,
+                  now: i64,
+                  keys: &str,
+                  highest: &str,
+                  expect: &str| {
         let body = format!(
             concat!(
-            "{{\n",
-            "  \"description\": \"{desc}\",\n",
-            "  \"commitment\": {{\n",
-            "    \"charter\": \"{charter}\",\n",
-            "    \"version\": {version},\n",
-            "    \"text_digest\": \"{td}\",\n",
-            "    \"compiled_digest\": \"{cd}\",\n",
-            "    \"key_id\": \"{key}\",\n",
-            "    \"not_before\": {nb},\n",
-            "    \"not_after\": {na}\n",
-            "  }},\n",
-            "  \"signature\": \"{sig}\",\n",
-            "  \"compiled\": \"{compiled}\",\n",
-            "  \"installing\": \"{installing}\",\n",
-            "  \"now\": {now},\n",
-            "  \"trusted_keys\": {keys},\n",
-            "  \"highest_version\": {highest},\n",
-            "  \"expect\": \"{expect}\"\n",
-            "}}\n"),
-            desc = desc, charter = c.charter, version = c.version,
-            td = hex(&c.text_digest), cd = hex(&c.compiled_digest), key = c.key_id,
-            nb = c.not_before, na = c.not_after,
-            sig = hex(sig), compiled = hex(compiled),
-            installing = installing, now = now, keys = keys, highest = highest, expect = expect,
+                "{{\n",
+                "  \"description\": \"{desc}\",\n",
+                "  \"commitment\": {{\n",
+                "    \"charter\": \"{charter}\",\n",
+                "    \"version\": {version},\n",
+                "    \"text_digest\": \"{td}\",\n",
+                "    \"compiled_digest\": \"{cd}\",\n",
+                "    \"key_id\": \"{key}\",\n",
+                "    \"not_before\": {nb},\n",
+                "    \"not_after\": {na}\n",
+                "  }},\n",
+                "  \"signature\": \"{sig}\",\n",
+                "  \"compiled\": \"{compiled}\",\n",
+                "  \"installing\": \"{installing}\",\n",
+                "  \"now\": {now},\n",
+                "  \"trusted_keys\": {keys},\n",
+                "  \"highest_version\": {highest},\n",
+                "  \"expect\": \"{expect}\"\n",
+                "}}\n"
+            ),
+            desc = desc,
+            charter = c.charter,
+            version = c.version,
+            td = hex(&c.text_digest),
+            cd = hex(&c.compiled_digest),
+            key = c.key_id,
+            nb = c.not_before,
+            na = c.not_after,
+            sig = hex(sig),
+            compiled = hex(compiled),
+            installing = installing,
+            now = now,
+            keys = keys,
+            highest = highest,
+            expect = expect,
         );
         std::fs::write(format!("{out}/{name}.json"), body).unwrap();
     };
@@ -53,9 +74,18 @@ fn main() {
     let now = 1_788_300_000;
     let keys = "[\"controller-1\"]";
 
-    render("valid.json".trim_end_matches(".json"),
+    render(
+        "valid.json".trim_end_matches(".json"),
         "A well-formed commitment. Every later fixture is this one with a single thing wrong.",
-        &base, &good_sig, &compiled, "acme-treasury", now, keys, "null", "ok");
+        &base,
+        &good_sig,
+        &compiled,
+        "acme-treasury",
+        now,
+        keys,
+        "null",
+        "ok",
+    );
 
     render("unknown-key",
         "E502 - key_id names no key in the trust root. Checked before the signature, because a signature under an untrusted key is not worth computing.",
@@ -83,9 +113,18 @@ fn main() {
         "E505 - not_after is exclusive. A charter that outlives its window stops, so staleness is a liveness failure with a deadline rather than a silent indefinite one.",
         &base, &good_sig, &compiled, "acme-treasury", base.not_after, keys, "null", "E505");
 
-    render("not-yet-valid",
+    render(
+        "not-yet-valid",
         "E505 - the other edge. not_before is inclusive; one second earlier is not.",
-        &base, &good_sig, &compiled, "acme-treasury", base.not_before - 1, keys, "null", "E505");
+        &base,
+        &good_sig,
+        &compiled,
+        "acme-treasury",
+        base.not_before - 1,
+        keys,
+        "null",
+        "E505",
+    );
 
     eprintln!("wrote 8 fixtures to {out}");
 }

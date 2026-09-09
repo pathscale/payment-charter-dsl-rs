@@ -82,7 +82,12 @@ impl Limit {
     /// The most it permits with a human approving the exact digest, which is the second of the
     /// two numbers a charter states.
     pub fn escalated_ceiling(&self) -> u64 {
-        self.escalations.iter().map(|e| e.ceiling).max().unwrap_or(0).max(self.autonomous_ceiling())
+        self.escalations
+            .iter()
+            .map(|e| e.ceiling)
+            .max()
+            .unwrap_or(0)
+            .max(self.autonomous_ceiling())
     }
 }
 
@@ -147,12 +152,23 @@ pub enum Selector {
     Or(alloc::boxed::Box<Selector>, alloc::boxed::Box<Selector>),
     Not(alloc::boxed::Box<Selector>),
     /// `field is/is not value`, and set membership for `in`/`not in`.
-    Is { field: Field, values: Vec<Atom>, negated: bool },
+    Is {
+        field: Field,
+        values: Vec<Atom>,
+        negated: bool,
+    },
     /// `provenance is at least <plane>` — compares on the taint order, so it keeps holding if
     /// a worse plane is ever added, which an enumerated set would not (W1).
-    IsAtLeast { field: Field, plane: Plane },
-    Before { date: i32 },
-    After { date: i32 },
+    IsAtLeast {
+        field: Field,
+        plane: Plane,
+    },
+    Before {
+        date: i32,
+    },
+    After {
+        date: i32,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -341,7 +357,11 @@ fn selector(s: &Selector) -> String {
         Selector::And(a, b) => alloc::format!("(and {} {})", selector(a), selector(b)),
         Selector::Or(a, b) => alloc::format!("(or {} {})", selector(a), selector(b)),
         Selector::Not(a) => alloc::format!("(not {})", selector(a)),
-        Selector::Is { field, values, negated } => {
+        Selector::Is {
+            field,
+            values,
+            negated,
+        } => {
             // Atoms were expanded from groups at compile time, so sorting them here makes the
             // encoding independent of the order a group happened to list its members.
             let mut vs: alloc::vec::Vec<String> = values.iter().map(atom).collect();

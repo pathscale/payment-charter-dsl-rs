@@ -126,9 +126,7 @@ impl InstrumentRef {
     pub fn prefix(&self) -> &str {
         match self {
             InstrumentRef::Card { network, .. } => network,
-            InstrumentRef::Wallet { chain, .. } => {
-                chain.split(':').next().unwrap_or(chain)
-            }
+            InstrumentRef::Wallet { chain, .. } => chain.split(':').next().unwrap_or(chain),
         }
     }
 
@@ -206,8 +204,14 @@ pub struct LimitDecl {
 
 #[derive(Clone, Debug)]
 pub enum Dimension {
-    Amount { base: Spanned<Money>, exceptions: Vec<Exception> },
-    Count { base: Spanned<u64>, exceptions: Vec<Exception> },
+    Amount {
+        base: Spanned<Money>,
+        exceptions: Vec<Exception>,
+    },
+    Count {
+        base: Spanned<u64>,
+        exceptions: Vec<Exception>,
+    },
 }
 
 impl Dimension {
@@ -244,8 +248,15 @@ pub enum ExcValue {
 
 #[derive(Clone, Debug)]
 pub enum Window {
-    Rolling { seconds: u64, unit: String, count: u64 },
-    Fixed { unit: String, tz: Option<String> },
+    Rolling {
+        seconds: u64,
+        unit: String,
+        count: u64,
+    },
+    Fixed {
+        unit: String,
+        tz: Option<String>,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

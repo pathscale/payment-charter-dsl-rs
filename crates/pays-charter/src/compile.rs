@@ -46,8 +46,10 @@ pub fn compile(c: &Charter, r: &Resolver) -> Result<Compiled, Vec<Diagnostic>> {
         }
     }
 
-    let scale: HashMap<&str, u8> =
-        assets.iter().map(|a| (a.name.as_str(), a.decimals)).collect();
+    let scale: HashMap<&str, u8> = assets
+        .iter()
+        .map(|a| (a.name.as_str(), a.decimals))
+        .collect();
 
     let asset_groups: Vec<(String, Vec<String>)> = c
         .decls
@@ -79,7 +81,10 @@ pub fn compile(c: &Charter, r: &Resolver) -> Result<Compiled, Vec<Diagnostic>> {
         .filter_map(|d| match d {
             Decl::Group(g) => Some((
                 g.name.node.as_str(),
-                g.members.iter().map(|m| Atom::Text(m.node.to_string())).collect(),
+                g.members
+                    .iter()
+                    .map(|m| Atom::Text(m.node.to_string()))
+                    .collect(),
             )),
             _ => None,
         })
@@ -91,7 +96,10 @@ pub fn compile(c: &Charter, r: &Resolver) -> Result<Compiled, Vec<Diagnostic>> {
     for d in &c.decls {
         match d {
             Decl::Prohibit(p) => match selector(&p.condition, &groups, &asset_groups) {
-                Ok(s) => prohibitions.push(Prohibition { id: p.name.node.clone(), selector: s }),
+                Ok(s) => prohibitions.push(Prohibition {
+                    id: p.name.node.clone(),
+                    selector: s,
+                }),
                 Err(e) => errors.push(e),
             },
             Decl::Limit(l) => {
@@ -166,9 +174,7 @@ fn compile_limit(
                 Err(e) => return Err(vec![Diagnostic::error("E202", e, base.span.clone())]),
             }
         }
-        ast::Dimension::Count { base, .. } => {
-            (Dimension::Count, String::from("#count"), base.node)
-        }
+        ast::Dimension::Count { base, .. } => (Dimension::Count, String::from("#count"), base.node),
     };
 
     let mut exceptions = Vec::new();
@@ -217,7 +223,9 @@ fn compile_limit(
     };
 
     let window = match &l.window.node {
-        ast::Window::Rolling { seconds, .. } => Window::Rolling { seconds: *seconds as i64 },
+        ast::Window::Rolling { seconds, .. } => Window::Rolling {
+            seconds: *seconds as i64,
+        },
         ast::Window::Fixed { unit, tz } => Window::Fixed {
             unit: CalUnit::parse(unit).unwrap_or(CalUnit::Day),
             // §5.4: a fixed window may override the charter offset for its own alignment only.
@@ -295,7 +303,11 @@ fn minor_units(m: &ast::Money, decimals: u8) -> Result<u64, String> {
     while padded.len() < decimals as usize {
         padded.push('0');
     }
-    let frac: u64 = if padded.is_empty() { 0 } else { padded.parse().map_err(|_| "overflow")? };
+    let frac: u64 = if padded.is_empty() {
+        0
+    } else {
+        padded.parse().map_err(|_| "overflow")?
+    };
     let scale = 10u64.checked_pow(decimals as u32).ok_or("scale overflow")?;
     m.integer
         .checked_mul(scale)
@@ -305,7 +317,9 @@ fn minor_units(m: &ast::Money, decimals: u8) -> Result<u64, String> {
 
 /// `UTC±HH:MM` to seconds. §2.9 already validated the shape and range.
 fn offset_seconds(tz: &str) -> i32 {
-    let Some(off) = tz.strip_prefix("UTC") else { return 0 };
+    let Some(off) = tz.strip_prefix("UTC") else {
+        return 0;
+    };
     if off.len() != 6 {
         return 0;
     }
@@ -339,14 +353,15 @@ fn selector(
             Box::new(selector(a, groups, asset_groups)?),
             Box::new(selector(b, groups, asset_groups)?),
         ),
-        ast::Condition::Not(a) => {
-            Selector::Not(Box::new(selector(a, groups, asset_groups)?))
-        }
+        ast::Condition::Not(a) => Selector::Not(Box::new(selector(a, groups, asset_groups)?)),
         ast::Condition::Compare(cmp) => {
             let Some(field) = Field::parse(&cmp.field.node) else {
                 return Err(Diagnostic::error(
                     "E301",
-                    format!("`{}` is not a field in the closed set of §6", cmp.field.node),
+                    format!(
+                        "`{}` is not a field in the closed set of §6",
+                        cmp.field.node
+                    ),
                     cmp.field.span.clone(),
                 ));
             };
@@ -384,7 +399,11 @@ fn selector(
                 op => {
                     let negated = op == "is not" || op == "not in";
                     let values = atoms(&cmp.value.node, groups, asset_groups);
-                    Selector::Is { field, values, negated }
+                    Selector::Is {
+                        field,
+                        values,
+                        negated,
+                    }
                 }
             }
         }
@@ -413,9 +432,10 @@ fn atoms(
             vec![Atom::Plane(Plane::parse(p).unwrap_or(Plane::Network))]
         }
         ast::Value::Date(d) => vec![Atom::Text(d.clone())],
-        ast::Value::Set(items) => {
-            items.iter().flat_map(|i| atoms(&i.node, groups, asset_groups)).collect()
-        }
+        ast::Value::Set(items) => items
+            .iter()
+            .flat_map(|i| atoms(&i.node, groups, asset_groups))
+            .collect(),
     }
 }
 

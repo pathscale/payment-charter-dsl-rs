@@ -110,7 +110,9 @@ pub enum ReservationState {
     Reserved,
     /// Awaiting a quorum. It still holds its reservation â otherwise thirty approvals queue
     /// under the ceiling and release together (Â§8.1.5).
-    PendingApproval { expires_at: i64 },
+    PendingApproval {
+        expires_at: i64,
+    },
     /// Released on **proof of death**, never on a timeout (Â§8.1.4).
     Released,
     Settled,
@@ -139,7 +141,12 @@ impl Ledger {
     pub fn exposure(&self, key: &AccumulatorKey) -> u128 {
         self.entries
             .get(key)
-            .map(|rs| rs.iter().filter(|r| r.counts()).map(|r| r.amount as u128).sum())
+            .map(|rs| {
+                rs.iter()
+                    .filter(|r| r.counts())
+                    .map(|r| r.amount as u128)
+                    .sum()
+            })
             .unwrap_or(0)
     }
 
@@ -166,10 +173,13 @@ impl Ledger {
     ) -> u64 {
         self.next_id += 1;
         let id = self.next_id;
-        self.entries
-            .entry(key)
-            .or_default()
-            .push(Reservation { id, at, amount, state, releasable });
+        self.entries.entry(key).or_default().push(Reservation {
+            id,
+            at,
+            amount,
+            state,
+            releasable,
+        });
         id
     }
 
@@ -250,9 +260,13 @@ pub fn check_invariant_chain(
     ledger: &Ledger,
 ) -> Result<(), String> {
     for key in ledger.keys() {
-        let found = chain
-            .depth_of(&key.level)
-            .and_then(|d| chain.levels()[d].limits.iter().find(|l| l.id == key.limit_id).map(|l| (d, l)));
+        let found = chain.depth_of(&key.level).and_then(|d| {
+            chain.levels()[d]
+                .limits
+                .iter()
+                .find(|l| l.id == key.limit_id)
+                .map(|l| (d, l))
+        });
         let Some((depth, limit)) = found else {
             // A superseded limit keeps enforcing until its window closes (Â§8.4A.2), so its
             // accumulator outliving its declaration is expected, not a violation.

@@ -15,8 +15,8 @@ use std::path::{Path, PathBuf};
 
 #[path = "json.rs"]
 mod json;
-use json::Json;
 use json::parse as parse_json;
+use json::Json;
 
 // ---------------------------------------------------------------- the harness
 
@@ -34,12 +34,19 @@ fn corpus() -> Option<PathBuf> {
 /// scales a literal — no float ever touches an amount.
 fn minor_units(s: &str, decimals: u8) -> u64 {
     let (whole, frac) = s.split_once('.').unwrap_or((s, ""));
-    assert!(frac.len() <= decimals as usize, "{s} exceeds {decimals} decimals");
+    assert!(
+        frac.len() <= decimals as usize,
+        "{s} exceeds {decimals} decimals"
+    );
     let mut padded = frac.to_string();
     while padded.len() < decimals as usize {
         padded.push('0');
     }
-    let f: u64 = if padded.is_empty() { 0 } else { padded.parse().unwrap() };
+    let f: u64 = if padded.is_empty() {
+        0
+    } else {
+        padded.parse().unwrap()
+    };
     whole.parse::<u64>().unwrap() * 10u64.pow(decimals as u32) + f
 }
 
@@ -167,7 +174,9 @@ fn run_vector(root: &Path, path: &Path) -> VectorResult {
             continue;
         }
 
-        let Some(expect) = step.str("expect") else { continue };
+        let Some(expect) = step.str("expect") else {
+            continue;
+        };
 
         // A tagged literal names exactly one field (§2.11), so route it by its tag rather
         // than setting both and letting a country match a category.
@@ -184,7 +193,9 @@ fn run_vector(root: &Path, path: &Path) -> VectorResult {
             instrument: step.str("instrument").map(str::to_string),
             counterparty: step.str("counterparty").map(str::to_string),
             mcc: tagged.filter(|t| t.starts_with("mcc:")).map(str::to_string),
-            country: tagged.filter(|t| t.starts_with("country:")).map(str::to_string),
+            country: tagged
+                .filter(|t| t.starts_with("country:"))
+                .map(str::to_string),
             agent: step.str("agent").map(str::to_string),
             account: step.str("account").map(str::to_string),
             // A vector's `provenance` sets every field, so bare `provenance` — the maximum
@@ -224,9 +235,7 @@ fn run_vector(root: &Path, path: &Path) -> VectorResult {
         // A vector asserting *which* rule refused is asserting the identity of the refusal,
         // which is the point of the corpus: a test passing because the wrong rule fired is
         // worse than no test.
-        if let (Outcome::Deny { by, .. }, Some(want)) =
-            (&decision.outcome, step.arr("denied_by"))
-        {
+        if let (Outcome::Deny { by, .. }, Some(want)) = (&decision.outcome, step.arr("denied_by")) {
             let want: Vec<String> = want
                 .iter()
                 .filter_map(|j| match j {
@@ -250,7 +259,9 @@ fn run_vector(root: &Path, path: &Path) -> VectorResult {
             }
             if let Some(want) = e.str("limit") {
                 if want != limit {
-                    failures.push(format!("request {n}: escalated on {limit}, expected {want}"));
+                    failures.push(format!(
+                        "request {n}: escalated on {limit}, expected {want}"
+                    ));
                 }
             }
         }
@@ -276,7 +287,11 @@ fn eval_vectors() {
         .filter(|p| p.extension().is_some_and(|x| x == "json"))
         .collect();
     files.sort();
-    assert!(!files.is_empty(), "no eval vectors found in {}", dir.display());
+    assert!(
+        !files.is_empty(),
+        "no eval vectors found in {}",
+        dir.display()
+    );
 
     let mut failed = Vec::new();
     for f in &files {
@@ -291,5 +306,10 @@ fn eval_vectors() {
             failed.push(r.name);
         }
     }
-    assert!(failed.is_empty(), "{} of {} vectors failed: {failed:?}", failed.len(), files.len());
+    assert!(
+        failed.is_empty(),
+        "{} of {} vectors failed: {failed:?}",
+        failed.len(),
+        files.len()
+    );
 }

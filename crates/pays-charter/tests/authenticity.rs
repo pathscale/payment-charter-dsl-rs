@@ -5,7 +5,9 @@
 //! is the valid one with exactly one thing wrong, so a check that silently stopped running
 //! would show up as a fixture passing for the wrong reason.
 
-use pays_policy::authenticity::{jcs, sha256, verify, AuthError, Commitment, Verifier, VersionStore};
+use pays_policy::authenticity::{
+    jcs, sha256, verify, AuthError, Commitment, Verifier, VersionStore,
+};
 use std::path::{Path, PathBuf};
 
 #[path = "json.rs"]
@@ -112,7 +114,10 @@ fn authenticity_fixtures() {
                 f.file_name().unwrap().to_string_lossy()
             ));
         } else {
-            eprintln!("  ok   {} -> {want}", f.file_name().unwrap().to_string_lossy());
+            eprintln!(
+                "  ok   {} -> {want}",
+                f.file_name().unwrap().to_string_lossy()
+            );
         }
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));

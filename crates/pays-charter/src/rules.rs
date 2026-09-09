@@ -44,14 +44,24 @@ fn build_table(c: &Charter, d: &mut Vec<Diagnostic>) -> HashMap<String, Entry> {
             d.push(
                 Diagnostic::error(
                     "E210",
-                    format!("`{}` is already declared as {}", n.node, prev.kind.describe()),
+                    format!(
+                        "`{}` is already declared as {}",
+                        n.node,
+                        prev.kind.describe()
+                    ),
                     n.span.clone(),
                 )
                 .with_related(prev.span.clone(), "first declared here"),
             );
             continue;
         }
-        t.insert(n.node.clone(), Entry { kind: decl.kind(), span: n.span.clone() });
+        t.insert(
+            n.node.clone(),
+            Entry {
+                kind: decl.kind(),
+                span: n.span.clone(),
+            },
+        );
     }
     t
 }
@@ -69,7 +79,12 @@ fn kind_for_field(field: &str) -> Option<Kind> {
 /// S21 (every asset and instrument named is declared here) and S28 (the declaration's kind
 /// matches the position). There is no position where two kinds are both acceptable.
 fn s21_s28_names(c: &Charter, t: &HashMap<String, Entry>, d: &mut Vec<Diagnostic>) {
-    let mut want = |name: &str, span: &Span, kinds: &[Kind], code: &'static str, what: &str, d: &mut Vec<Diagnostic>| {
+    let mut want = |name: &str,
+                    span: &Span,
+                    kinds: &[Kind],
+                    code: &'static str,
+                    what: &str,
+                    d: &mut Vec<Diagnostic>| {
         match t.get(name) {
             None => d.push(Diagnostic::error(
                 code,
@@ -97,7 +112,14 @@ fn s21_s28_names(c: &Charter, t: &HashMap<String, Entry>, d: &mut Vec<Diagnostic
         match decl {
             Decl::Limit(l) => {
                 for m in monies(l) {
-                    want(&m.asset.node, &m.asset.span, ASSETISH, "E201", "an asset", d);
+                    want(
+                        &m.asset.node,
+                        &m.asset.span,
+                        ASSETISH,
+                        "E201",
+                        "an asset",
+                        d,
+                    );
                 }
                 for e in &l.escalations {
                     want(
@@ -142,7 +164,9 @@ where
         }
         Condition::Not(a) => check_condition(a, want, d),
         Condition::Compare(cmp) => {
-            let Some(kind) = kind_for_field(&cmp.field.node) else { return };
+            let Some(kind) = kind_for_field(&cmp.field.node) else {
+                return;
+            };
             let (code, what) = match kind {
                 Kind::Asset => ("E201", "an asset"),
                 Kind::Instrument => ("E217", "an instrument"),
@@ -305,7 +329,9 @@ fn s22_asset_groups(c: &Charter, t: &HashMap<String, Entry>, d: &mut Vec<Diagnos
             if t.get(&m.node).map(|e| e.kind) != Some(Kind::Asset) {
                 continue;
             }
-            let Some(a) = assets.get(m.node.as_str()) else { continue };
+            let Some(a) = assets.get(m.node.as_str()) else {
+                continue;
+            };
             let (sym, iss) = (a.reference.node.symbol(), a.reference.node.issuer());
             match first {
                 None => first = Some((sym, iss, &m.span)),
@@ -345,7 +371,10 @@ fn s26_s27_instruments(c: &Charter, d: &mut Vec<Diagnostic>) {
                 format!("`{name}` is the bare network; an instrument name needs a qualifier (S27)"),
                 i.name.span.clone(),
             ));
-        } else if !name.strip_prefix(prefix).is_some_and(|r| r.starts_with('_')) {
+        } else if !name
+            .strip_prefix(prefix)
+            .is_some_and(|r| r.starts_with('_'))
+        {
             d.push(
                 Diagnostic::error(
                     "E211",
@@ -496,7 +525,11 @@ fn s14_s15_s17_escalations(c: &Charter, t: &HashMap<String, Entry>, d: &mut Vec<
 /// Comparable only against another literal of the same asset; the resolver supplies the true
 /// scale, so this is a same-scale comparison and nothing more.
 fn minor_units(m: &Money) -> Option<u128> {
-    let frac: u128 = if m.fraction.is_empty() { 0 } else { m.fraction.parse().ok()? };
+    let frac: u128 = if m.fraction.is_empty() {
+        0
+    } else {
+        m.fraction.parse().ok()?
+    };
     let scale = 10u128.checked_pow(m.fraction.len() as u32)?;
     Some((m.integer as u128).checked_mul(scale)? + frac)
 }
@@ -551,12 +584,12 @@ fn unsatisfiable(c: &Condition) -> Option<String> {
                 // `date after L and date before R` with an empty span.
                 if x.field.node == "date" && y.field.node == "date" {
                     if let (Value::Date(l), Value::Date(r)) = (&x.value.node, &y.value.node) {
-                        let (after, before) = match (x.operator.node.as_str(), y.operator.node.as_str())
-                        {
-                            ("after", "before") => (l, r),
-                            ("before", "after") => (r, l),
-                            _ => return None,
-                        };
+                        let (after, before) =
+                            match (x.operator.node.as_str(), y.operator.node.as_str()) {
+                                ("after", "before") => (l, r),
+                                ("before", "after") => (r, l),
+                                _ => return None,
+                            };
                         if after >= before {
                             return Some(format!(
                                 "the range after {after} and before {before} contains no day"
@@ -820,9 +853,10 @@ fn s4_exceptions_disjoint(c: &Charter, d: &mut Vec<Diagnostic>) {
         .decls
         .iter()
         .filter_map(|x| match x {
-            Decl::Group(g) => {
-                Some((g.name.node.as_str(), g.members.iter().map(|m| m.node.to_string()).collect()))
-            }
+            Decl::Group(g) => Some((
+                g.name.node.as_str(),
+                g.members.iter().map(|m| m.node.to_string()).collect(),
+            )),
             _ => None,
         })
         .collect();
@@ -878,7 +912,10 @@ fn disjoint(a: &Condition, b: &Condition, groups: &HashMap<&str, Vec<String>>) -
 
     match (x.operator.node.as_str(), y.operator.node.as_str()) {
         // Two positive membership tests over disjoint value sets cannot both hold.
-        ("is" | "in", "is" | "in") => match (members(&x.value.node, groups), members(&y.value.node, groups)) {
+        ("is" | "in", "is" | "in") => match (
+            members(&x.value.node, groups),
+            members(&y.value.node, groups),
+        ) {
             (Some(p), Some(q)) => !p.iter().any(|m| q.contains(m)),
             _ => false,
         },
@@ -904,7 +941,12 @@ fn members(v: &Value, groups: &HashMap<&str, Vec<String>>) -> Option<Vec<String>
         Value::Date(d) => Some(vec![d.clone()]),
         // An undeclared name is its own singleton: S21 reports it, and inventing an expansion
         // here would make one mistake produce two diagnostics.
-        Value::Named(n) => Some(groups.get(n.as_str()).cloned().unwrap_or_else(|| vec![n.clone()])),
+        Value::Named(n) => Some(
+            groups
+                .get(n.as_str())
+                .cloned()
+                .unwrap_or_else(|| vec![n.clone()]),
+        ),
         Value::Set(items) => {
             let mut out = Vec::new();
             for i in items {

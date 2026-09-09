@@ -109,7 +109,10 @@ impl<'a> Chain<'a> {
 
     /// A chain of one. The common case, and it is the same type so no caller branches on it.
     pub fn single(c: &'a Compiled) -> Self {
-        Self { levels: alloc::vec![c], warnings: Vec::new() }
+        Self {
+            levels: alloc::vec![c],
+            warnings: Vec::new(),
+        }
     }
 
     /// Root first, leaf last.
@@ -233,8 +236,7 @@ fn check_level(
             for asset in covers(child, &l.asset) {
                 let capped = ancestors.iter().any(|a| {
                     a.limits.iter().any(|p| {
-                        p.dimension == Dimension::Amount
-                            && covers(a, &p.asset).contains(&asset)
+                        p.dimension == Dimension::Amount && covers(a, &p.asset).contains(&asset)
                     })
                 });
                 if !capped {
@@ -263,7 +265,11 @@ fn check_level(
         // parent's per-window ceiling caps any single request too, so a child number above it
         // can never be reached whatever the two windows are; a child number below it may well
         // be reachable, so the absence of a warning claims nothing.
-        let parent_autonomous = peers.iter().map(|p| p.autonomous_ceiling()).min().unwrap_or(0);
+        let parent_autonomous = peers
+            .iter()
+            .map(|p| p.autonomous_ceiling())
+            .min()
+            .unwrap_or(0);
         if l.autonomous_ceiling() > parent_autonomous {
             warnings.push(ChainDiagnostic::warning(
                 "W2",
@@ -287,7 +293,11 @@ fn check_level(
         // Only the `up to` values declared here, not `escalated_ceiling`, which folds in the
         // base. A base above the parent is dead text and W2 has just said so; E313 is the
         // narrower claim that a quorum named at this level reaches past the chain.
-        let parent_escalated = peers.iter().map(|p| p.escalated_ceiling()).min().unwrap_or(0);
+        let parent_escalated = peers
+            .iter()
+            .map(|p| p.escalated_ceiling())
+            .min()
+            .unwrap_or(0);
         let reach = l.escalations.iter().map(|e| e.ceiling).max().unwrap_or(0);
         if reach > parent_escalated {
             errors.push(ChainDiagnostic::error(

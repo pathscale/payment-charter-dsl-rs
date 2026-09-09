@@ -67,24 +67,92 @@ pub struct LexError {
 
 /// §2.3. Single words only; the multi-word forms are in `MULTI`.
 pub const RESERVED: &[&str] = &[
-    "above", "account", "agent", "amount", "and", "approvers", "asset", "at", "after", "before",
-    "category", "charter", "common", "count", "counterparty", "date", "day", "days", "deny",
-    "escalate", "except", "exhausted", "extends", "fixed", "for", "full", "group", "hour",
-    "hours", "in", "instrument", "is", "least", "limit", "merchant", "minute", "minutes",
-    "month", "network", "not", "of", "or", "per", "policy", "principal", "prohibit", "provenance",
-    "require", "resolver", "rolling", "scope", "second", "seconds", "timezone", "to", "unlimited",
-    "up", "version", "week", "when", "within", "year",
+    "above",
+    "account",
+    "agent",
+    "amount",
+    "and",
+    "approvers",
+    "asset",
+    "at",
+    "after",
+    "before",
+    "category",
+    "charter",
+    "common",
+    "count",
+    "counterparty",
+    "date",
+    "day",
+    "days",
+    "deny",
+    "escalate",
+    "except",
+    "exhausted",
+    "extends",
+    "fixed",
+    "for",
+    "full",
+    "group",
+    "hour",
+    "hours",
+    "in",
+    "instrument",
+    "is",
+    "least",
+    "limit",
+    "merchant",
+    "minute",
+    "minutes",
+    "month",
+    "network",
+    "not",
+    "of",
+    "or",
+    "per",
+    "policy",
+    "principal",
+    "prohibit",
+    "provenance",
+    "require",
+    "resolver",
+    "rolling",
+    "scope",
+    "second",
+    "seconds",
+    "timezone",
+    "to",
+    "unlimited",
+    "up",
+    "version",
+    "week",
+    "when",
+    "within",
+    "year",
 ];
 
 /// Longest first: `is at least` must win over `at least`, and both over their prefixes.
-const MULTI: &[&str] = &["is at least", "when exhausted", "is not", "not in", "at least", "up to"];
+const MULTI: &[&str] = &[
+    "is at least",
+    "when exhausted",
+    "is not",
+    "not in",
+    "at least",
+    "up to",
+];
 
 /// Reserved words that are no longer usable, and the error that says so. Reserving a stale
 /// keyword turns an old document into a clear diagnostic rather than a confusing parse.
 fn retired(word: &str) -> Option<(&'static str, &'static str)> {
     match word {
-        "deny" => Some(("E103", "`deny` is no longer a value; prohibition is its own declaration (§8.2.1)")),
-        "policy" => Some(("E101", "`policy` was the opening keyword in an earlier draft; use `charter`")),
+        "deny" => Some((
+            "E103",
+            "`deny` is no longer a value; prohibition is its own declaration (§8.2.1)",
+        )),
+        "policy" => Some((
+            "E101",
+            "`policy` was the opening keyword in an earlier draft; use `charter`",
+        )),
         _ => None,
     }
 }
@@ -117,7 +185,10 @@ pub fn lex(src: &str) -> Result<Vec<Token>, LexError> {
 
         let single = |t: Tok, i: &mut usize| {
             *i += 1;
-            Some(Token { tok: t, span: start..*i })
+            Some(Token {
+                tok: t,
+                span: start..*i,
+            })
         };
         if let Some(t) = match c {
             '=' => single(Tok::Eq, &mut i),
@@ -137,14 +208,20 @@ pub fn lex(src: &str) -> Result<Vec<Token>, LexError> {
         // A timezone is one token. Tried before identifiers so the sign and colon of an
         // offset never become punctuation nobody can use.
         if let Some(len) = tz_len(&src[i..]) {
-            out.push(Token { tok: Tok::Tz(src[i..i + len].to_string()), span: start..i + len });
+            out.push(Token {
+                tok: Tok::Tz(src[i..i + len].to_string()),
+                span: start..i + len,
+            });
             i += len;
             continue;
         }
 
         // A reference is one token, decomposed later by charter-assetref.
         if let Some(len) = reference_len(&src[i..]) {
-            out.push(Token { tok: Tok::Ref(src[i..i + len].to_string()), span: start..i + len });
+            out.push(Token {
+                tok: Tok::Ref(src[i..i + len].to_string()),
+                span: start..i + len,
+            });
             i += len;
             continue;
         }
@@ -158,12 +235,18 @@ pub fn lex(src: &str) -> Result<Vec<Token>, LexError> {
                 j += 1;
             }
             if is_addr(&src[i..j]) {
-                out.push(Token { tok: Tok::Addr(src[i..j].to_string()), span: start..j });
+                out.push(Token {
+                    tok: Tok::Addr(src[i..j].to_string()),
+                    span: start..j,
+                });
                 i = j;
                 continue;
             }
             let (tok, len) = lex_number(&src[i..], start)?;
-            out.push(Token { tok, span: start..i + len });
+            out.push(Token {
+                tok,
+                span: start..i + len,
+            });
             i += len;
             continue;
         }
@@ -176,7 +259,8 @@ pub fn lex(src: &str) -> Result<Vec<Token>, LexError> {
                 if ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' {
                     j += 1;
                 } else if ch == '.'
-                    && b.get(j + 1).is_some_and(|n| (*n as char).is_ascii_alphabetic())
+                    && b.get(j + 1)
+                        .is_some_and(|n| (*n as char).is_ascii_alphabetic())
                 {
                     // A dotted field name is one token: merchant.category, asset.class,
                     // provenance.recipient. A declaration name may not contain a dot, which
@@ -210,31 +294,51 @@ pub fn lex(src: &str) -> Result<Vec<Token>, LexError> {
             if word.len() > 64 {
                 return Err(LexError {
                     code: "E101",
-                    message: format!("an identifier is at most 64 characters, found {}", word.len()),
+                    message: format!(
+                        "an identifier is at most 64 characters, found {}",
+                        word.len()
+                    ),
                     span: start..j,
                 });
             }
 
             // Multi-word operators, longest first, only when the first word matches exactly.
-            if let Some(m) = MULTI.iter().find(|m| {
-                m.split(' ').next() == Some(word) && matches_words(src, i, m)
-            }) {
+            if let Some(m) = MULTI
+                .iter()
+                .find(|m| m.split(' ').next() == Some(word) && matches_words(src, i, m))
+            {
                 let len = multi_len(src, i, m);
-                out.push(Token { tok: Tok::Kw(m), span: start..i + len });
+                out.push(Token {
+                    tok: Tok::Kw(m),
+                    span: start..i + len,
+                });
                 i += len;
                 continue;
             }
 
             if let Some((code, message)) = retired(word) {
-                return Err(LexError { code, message: message.to_string(), span: start..j });
+                return Err(LexError {
+                    code,
+                    message: message.to_string(),
+                    span: start..j,
+                });
             }
 
             if let Some(kw) = RESERVED.iter().find(|k| **k == word) {
-                out.push(Token { tok: Tok::Kw(kw), span: start..j });
+                out.push(Token {
+                    tok: Tok::Kw(kw),
+                    span: start..j,
+                });
             } else if is_addr(word) {
-                out.push(Token { tok: Tok::Addr(word.to_string()), span: start..j });
+                out.push(Token {
+                    tok: Tok::Addr(word.to_string()),
+                    span: start..j,
+                });
             } else {
-                out.push(Token { tok: Tok::Ident(word.to_string()), span: start..j });
+                out.push(Token {
+                    tok: Tok::Ident(word.to_string()),
+                    span: start..j,
+                });
             }
             i = j;
             continue;
@@ -300,12 +404,16 @@ fn reference_len(s: &str) -> Option<usize> {
     let is_scheme = schemes.iter().any(|p| s.starts_with(p));
     let is_caip19 = {
         // `<ns>:<ref>/<asset-ns>:<asset-ref>` — a colon before a slash, and no `//`.
-        let end = s.find(|c: char| c.is_whitespace() || c == ',' || c == '}').unwrap_or(s.len());
+        let end = s
+            .find(|c: char| c.is_whitespace() || c == ',' || c == '}')
+            .unwrap_or(s.len());
         let head = &s[..end];
         !head.contains("://")
             && head.matches('/').count() == 1
             && head.matches(':').count() == 2
-            && head.find(':').is_some_and(|c| head.find('/').is_some_and(|sl| c < sl))
+            && head
+                .find(':')
+                .is_some_and(|c| head.find('/').is_some_and(|sl| c < sl))
     };
     if !is_scheme && !is_caip19 {
         return None;
@@ -324,7 +432,10 @@ fn lex_number(s: &str, start: usize) -> Result<(Tok, usize), LexError> {
     while i < b.len() && (b[i].is_ascii_digit() || b[i] == b'_') {
         if b[i] == b'_' {
             // A separator must not lead, trail, or follow '.' (§2.5).
-            if i == 0 || !b[i - 1].is_ascii_digit() || i + 1 >= b.len() || !b[i + 1].is_ascii_digit()
+            if i == 0
+                || !b[i - 1].is_ascii_digit()
+                || i + 1 >= b.len()
+                || !b[i + 1].is_ascii_digit()
             {
                 return Err(LexError {
                     code: "E101",
@@ -407,7 +518,10 @@ mod tests {
 
     #[test]
     fn is_at_least_beats_at_least() {
-        assert_eq!(toks("provenance is at least merchant")[1], Tok::Kw("is at least"));
+        assert_eq!(
+            toks("provenance is at least merchant")[1],
+            Tok::Kw("is at least")
+        );
         assert_eq!(toks("escalate at least 50")[1], Tok::Kw("at least"));
     }
 
@@ -440,7 +554,11 @@ mod tests {
         let t = toks("asset X = asset://solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp/token:EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
         assert!(matches!(t[3], Tok::Ref(_)));
         let t = toks("asset X = solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp/token:EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
-        assert!(matches!(t[3], Tok::Ref(_)), "bare CAIP-19 is a reference too: {:?}", t[3]);
+        assert!(
+            matches!(t[3], Tok::Ref(_)),
+            "bare CAIP-19 is a reference too: {:?}",
+            t[3]
+        );
     }
 
     #[test]
@@ -449,14 +567,23 @@ mod tests {
         assert_eq!(toks("20")[0], Tok::Int(20));
         assert_eq!(toks("1_000_000")[0], Tok::Int(1000000));
         assert!(lex("1__0").is_err());
-        assert!(lex("_1").is_ok(), "a leading underscore starts an identifier, not a number");
+        assert!(
+            lex("_1").is_ok(),
+            "a leading underscore starts an identifier, not a number"
+        );
     }
 
     #[test]
     fn dates_and_tags() {
         assert_eq!(toks("2026-12-20")[0], Tok::Date("2026-12-20".into()));
-        assert_eq!(toks("mcc:5411")[0], Tok::Tagged("mcc".into(), "5411".into()));
-        assert_eq!(toks("class:fiat_reserve")[0], Tok::Tagged("class".into(), "fiat_reserve".into()));
+        assert_eq!(
+            toks("mcc:5411")[0],
+            Tok::Tagged("mcc".into(), "5411".into())
+        );
+        assert_eq!(
+            toks("class:fiat_reserve")[0],
+            Tok::Tagged("class".into(), "fiat_reserve".into())
+        );
     }
 
     #[test]
@@ -474,7 +601,10 @@ mod tests {
         assert!(lex("asset US\\u0043 = x").is_err(), "no escape sequences");
         // Non-ASCII is confined to comments, so a homoglyph cannot reach an identifier and
         // slip past S19's byte comparison.
-        assert!(lex("asset USDС_circle = x").is_err(), "Cyrillic С is not an identifier char");
+        assert!(
+            lex("asset USDС_circle = x").is_err(),
+            "Cyrillic С is not an identifier char"
+        );
         assert!(lex("# Cyrillic С is fine in a comment\nlimit x").is_ok());
     }
 }

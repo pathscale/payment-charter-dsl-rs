@@ -19,13 +19,19 @@ pub fn parse(src: &str) -> Result<Charter, Vec<Diagnostic>> {
         Ok(t) => t,
         Err(e) => return Err(vec![Diagnostic::error(e.code, e.message, e.span)]),
     };
-    let mut p = Parser { t: tokens, i: 0, errors: Vec::new(), end: src.len() };
+    let mut p = Parser {
+        t: tokens,
+        i: 0,
+        errors: Vec::new(),
+        end: src.len(),
+    };
     let charter = p.charter();
     match charter {
         Some(c) if p.errors.is_empty() => Ok(c),
         _ => {
             if p.errors.is_empty() {
-                p.errors.push(Diagnostic::error("E101", "empty document", 0..src.len()));
+                p.errors
+                    .push(Diagnostic::error("E101", "empty document", 0..src.len()));
             }
             Err(p.errors)
         }
@@ -45,11 +51,17 @@ impl Parser {
     }
 
     fn span(&self) -> Span {
-        self.t.get(self.i).map(|t| t.span.clone()).unwrap_or(self.end..self.end)
+        self.t
+            .get(self.i)
+            .map(|t| t.span.clone())
+            .unwrap_or(self.end..self.end)
     }
 
     fn prev_span(&self) -> Span {
-        self.t.get(self.i.saturating_sub(1)).map(|t| t.span.clone()).unwrap_or(self.end..self.end)
+        self.t
+            .get(self.i.saturating_sub(1))
+            .map(|t| t.span.clone())
+            .unwrap_or(self.end..self.end)
     }
 
     fn bump(&mut self) -> Option<Tok> {
@@ -110,7 +122,10 @@ impl Parser {
             Some(Tok::Addr(s)) => Some(Name::new(s, span)),
             _ => {
                 self.i = self.i.saturating_sub(1);
-                self.err("E101", format!("expected an identifier, found {}", self.describe()));
+                self.err(
+                    "E101",
+                    format!("expected an identifier, found {}", self.describe()),
+                );
                 self.i += 1;
                 None
             }
@@ -123,7 +138,10 @@ impl Parser {
             Some(Tok::Int(n)) => Some(Spanned::new(n, span)),
             _ => {
                 self.i = self.i.saturating_sub(1);
-                self.err("E101", format!("expected an integer, found {}", self.describe()));
+                self.err(
+                    "E101",
+                    format!("expected an integer, found {}", self.describe()),
+                );
                 self.i += 1;
                 None
             }
@@ -134,8 +152,14 @@ impl Parser {
     /// both trivial and safe — every construct is reachable from that set, so recovery never
     /// has to guess.
     fn recover(&mut self) {
-        const STARTS: &[&str] =
-            &["asset", "instrument", "group", "approvers", "prohibit", "limit"];
+        const STARTS: &[&str] = &[
+            "asset",
+            "instrument",
+            "group",
+            "approvers",
+            "prohibit",
+            "limit",
+        ];
         while let Some(t) = self.peek() {
             if let Tok::Kw(k) = t {
                 if STARTS.contains(k) {
@@ -291,7 +315,9 @@ impl Parser {
     /// miss like `UTC+1:00` is diagnosed as the offset it obviously meant to be rather than
     /// as an unexpected character.
     fn check_offset(&mut self, tz: &str, span: Span) -> String {
-        let Some(off) = tz.strip_prefix("UTC") else { return "UTC+00:00".into() };
+        let Some(off) = tz.strip_prefix("UTC") else {
+            return "UTC+00:00".into();
+        };
         if off.is_empty() {
             return "UTC+00:00".into();
         }
@@ -328,7 +354,11 @@ impl Parser {
             ));
             return "UTC+00:00".into();
         }
-        let total = if sign == "-" { -(hh * 60 + mm) } else { hh * 60 + mm };
+        let total = if sign == "-" {
+            -(hh * 60 + mm)
+        } else {
+            hh * 60 + mm
+        };
         if !(-12 * 60..=14 * 60).contains(&total) {
             self.errors.push(Diagnostic::error(
                 "E206",
@@ -344,7 +374,10 @@ impl Parser {
         if self.at_kw("asset") {
             // Maximal munch already decided this: `asset group X` is two keywords, while
             // `asset group_solana` is a keyword and one identifier.
-            if matches!(self.t.get(self.i + 1).map(|t| &t.tok), Some(Tok::Kw("group"))) {
+            if matches!(
+                self.t.get(self.i + 1).map(|t| &t.tok),
+                Some(Tok::Kw("group"))
+            ) {
                 return self.asset_group().map(Decl::AssetGroup);
             }
             return self.asset().map(Decl::Asset);
@@ -364,7 +397,10 @@ impl Parser {
         if self.at_kw("limit") {
             return self.limit().map(Decl::Limit);
         }
-        self.err("E101", format!("expected a declaration, found {}", self.describe()));
+        self.err(
+            "E101",
+            format!("expected a declaration, found {}", self.describe()),
+        );
         None
     }
 
@@ -378,9 +414,13 @@ impl Parser {
             return None;
         };
         match aref::parse(&text, span.start) {
-            Ok(r) => Some(AssetDecl { name, reference: Spanned::new(r, span) }),
+            Ok(r) => Some(AssetDecl {
+                name,
+                reference: Spanned::new(r, span),
+            }),
             Err(e) => {
-                self.errors.push(Diagnostic::error(e.code, e.message, e.span));
+                self.errors
+                    .push(Diagnostic::error(e.code, e.message, e.span));
                 None
             }
         }
@@ -408,7 +448,10 @@ impl Parser {
             let mut it = rest.splitn(2, '/');
             match (it.next(), it.next()) {
                 (Some(n), Some(h)) if !n.is_empty() && !h.is_empty() && !h.contains('/') => {
-                    InstrumentRef::Card { network: n.into(), handle: h.into() }
+                    InstrumentRef::Card {
+                        network: n.into(),
+                        handle: h.into(),
+                    }
                 }
                 _ => {
                     self.errors.push(Diagnostic::error(
@@ -423,7 +466,10 @@ impl Parser {
             let mut it = rest.splitn(2, '/');
             match (it.next(), it.next()) {
                 (Some(c), Some(a)) if c.contains(':') && !a.is_empty() && !a.contains('/') => {
-                    InstrumentRef::Wallet { chain: c.into(), address: a.into() }
+                    InstrumentRef::Wallet {
+                        chain: c.into(),
+                        address: a.into(),
+                    }
                 }
                 _ => {
                     self.errors.push(Diagnostic::error(
@@ -442,7 +488,10 @@ impl Parser {
             ));
             return None;
         };
-        Some(InstrumentDecl { name, reference: Spanned::new(r, span) })
+        Some(InstrumentDecl {
+            name,
+            reference: Spanned::new(r, span),
+        })
     }
 
     fn group(&mut self) -> Option<GroupDecl> {
@@ -485,7 +534,11 @@ impl Parser {
         let name = self.ident()?;
         let dimension = self.dimension()?;
 
-        let applies = if self.eat_kw("for") { Some(self.condition()?) } else { None };
+        let applies = if self.eat_kw("for") {
+            Some(self.condition()?)
+        } else {
+            None
+        };
 
         let wspan = self.span();
         let window = self.window()?;
@@ -502,7 +555,10 @@ impl Parser {
             } else if self.eat_kw("counterparty") {
                 Scope::Counterparty
             } else {
-                self.err("E101", "a scope is account, agent, instrument or counterparty");
+                self.err(
+                    "E101",
+                    "a scope is account, agent, instrument or counterparty",
+                );
                 Scope::Account
             };
             Some(Spanned::new(v, s))
@@ -537,16 +593,25 @@ impl Parser {
             while self.at_kw("except") {
                 exceptions.push(self.exception(true)?);
             }
-            Some(Dimension::Amount { base: Spanned::new(m, span), exceptions })
+            Some(Dimension::Amount {
+                base: Spanned::new(m, span),
+                exceptions,
+            })
         } else if self.eat_kw("count") {
             let n = self.uint()?;
             let mut exceptions = Vec::new();
             while self.at_kw("except") {
                 exceptions.push(self.exception(false)?);
             }
-            Some(Dimension::Count { base: n, exceptions })
+            Some(Dimension::Count {
+                base: n,
+                exceptions,
+            })
         } else {
-            self.err("E101", format!("expected `amount` or `count`, found {}", self.describe()));
+            self.err(
+                "E101",
+                format!("expected `amount` or `count`, found {}", self.describe()),
+            );
             None
         }
     }
@@ -557,13 +622,20 @@ impl Parser {
             Some(Tok::Int(i)) => (i, String::new()),
             _ => {
                 self.i = self.i.saturating_sub(1);
-                self.err("E101", format!("expected an amount, found {}", self.describe()));
+                self.err(
+                    "E101",
+                    format!("expected an amount, found {}", self.describe()),
+                );
                 self.i += 1;
                 return None;
             }
         };
         let asset = self.ident()?;
-        Some(Money { integer, fraction, asset })
+        Some(Money {
+            integer,
+            fraction,
+            asset,
+        })
     }
 
     fn exception(&mut self, amount: bool) -> Option<Exception> {
@@ -594,19 +666,32 @@ impl Parser {
                 "day" | "days" => 86400,
                 _ => 1,
             };
-            Some(Window::Rolling { seconds: n.saturating_mul(secs), unit, count: n })
+            Some(Window::Rolling {
+                seconds: n.saturating_mul(secs),
+                unit,
+                count: n,
+            })
         } else if self.eat_kw("fixed") {
             let unit = self.cal_unit()?;
-            let tz = if self.eat_kw("in") { Some(self.timezone_text()) } else { None };
+            let tz = if self.eat_kw("in") {
+                Some(self.timezone_text())
+            } else {
+                None
+            };
             Some(Window::Fixed { unit, tz })
         } else {
-            self.err("E101", "a window is `per rolling <duration>` or `per fixed <unit>`");
+            self.err(
+                "E101",
+                "a window is `per rolling <duration>` or `per fixed <unit>`",
+            );
             None
         }
     }
 
     fn time_unit(&mut self) -> Option<String> {
-        for u in ["seconds", "second", "minutes", "minute", "hours", "hour", "days", "day"] {
+        for u in [
+            "seconds", "second", "minutes", "minute", "hours", "hour", "days", "day",
+        ] {
             if self.eat_kw(u) {
                 return Some(u.to_string());
             }
@@ -637,7 +722,11 @@ impl Parser {
                     let n = self.uint()?.node;
                     if matches!(self.peek(), Some(Tok::Ident(_))) {
                         let asset = self.ident()?;
-                        Trigger::Above(Money { integer: n, fraction: String::new(), asset })
+                        Trigger::Above(Money {
+                            integer: n,
+                            fraction: String::new(),
+                            asset,
+                        })
                     } else {
                         Trigger::AboveCount(n)
                     }
@@ -650,14 +739,21 @@ impl Parser {
                     let n = self.uint()?.node;
                     if matches!(self.peek(), Some(Tok::Ident(_))) {
                         let asset = self.ident()?;
-                        Trigger::AtLeast(Money { integer: n, fraction: String::new(), asset })
+                        Trigger::AtLeast(Money {
+                            integer: n,
+                            fraction: String::new(),
+                            asset,
+                        })
                     } else {
                         Trigger::AtLeastCount(n)
                     }
                 }
             }
         } else {
-            self.err("E101", "an escalation trigger is `above`, `at least` or `when exhausted`");
+            self.err(
+                "E101",
+                "an escalation trigger is `above`, `at least` or `when exhausted`",
+            );
             return None;
         };
 
@@ -674,7 +770,11 @@ impl Parser {
                 if matches!(self.peek(), Some(Tok::Ident(_))) {
                     let asset = self.ident()?;
                     Spanned::new(
-                        ExcValue::Money(Money { integer: n, fraction: String::new(), asset }),
+                        ExcValue::Money(Money {
+                            integer: n,
+                            fraction: String::new(),
+                            asset,
+                        }),
                         cspan,
                     )
                 } else {
@@ -693,7 +793,10 @@ impl Parser {
                 "hour" | "hours" => 3600,
                 _ => 86400,
             };
-            (Some(Spanned::new(n.saturating_mul(secs), s)), Some((n, unit)))
+            (
+                Some(Spanned::new(n.saturating_mul(secs), s)),
+                Some((n, unit)),
+            )
         } else {
             (None, None)
         };
@@ -764,7 +867,10 @@ impl Parser {
         } else if self.eat_kw("after") {
             "after"
         } else {
-            self.err("E301", format!("expected an operator, found {}", self.describe()));
+            self.err(
+                "E301",
+                format!("expected an operator, found {}", self.describe()),
+            );
             return None;
         };
 
@@ -791,7 +897,10 @@ impl Parser {
                 s
             }
             _ => {
-                self.err("E301", format!("expected a field, found {}", self.describe()));
+                self.err(
+                    "E301",
+                    format!("expected a field, found {}", self.describe()),
+                );
                 return None;
             }
         };
@@ -819,7 +928,8 @@ impl Parser {
                 Some(Value::Plane(k.to_string()))
             }
             _ => {
-                self.errors.push(Diagnostic::error("E301", "expected a value", span));
+                self.errors
+                    .push(Diagnostic::error("E301", "expected a value", span));
                 None
             }
         }
@@ -847,7 +957,8 @@ impl Parser {
             }
             if self.peek().is_none() {
                 let s = self.prev_span();
-                self.errors.push(Diagnostic::error("E101", "unclosed `{`", s));
+                self.errors
+                    .push(Diagnostic::error("E101", "unclosed `{`", s));
                 return None;
             }
             out.push(item(self)?);

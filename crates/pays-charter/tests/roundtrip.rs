@@ -37,7 +37,9 @@ fn emitting_an_accept_fixture_produces_something_this_parser_accepts() {
     let mut failures = Vec::new();
     for f in charters(&root.join("parse/accept")) {
         let src = std::fs::read_to_string(&f).unwrap();
-        let Ok(ast) = pays_charter::parse(&src) else { continue };
+        let Ok(ast) = pays_charter::parse(&src) else {
+            continue;
+        };
         let text = pays_charter::emit(&ast);
         if let Err(e) = pays_charter::parse(&text) {
             failures.push(format!(
@@ -58,9 +60,13 @@ fn emission_is_idempotent() {
     let mut failures = Vec::new();
     for f in charters(&root.join("parse/accept")) {
         let src = std::fs::read_to_string(&f).unwrap();
-        let Ok(ast) = pays_charter::parse(&src) else { continue };
+        let Ok(ast) = pays_charter::parse(&src) else {
+            continue;
+        };
         let once = pays_charter::emit(&ast);
-        let Ok(again) = pays_charter::parse(&once) else { continue };
+        let Ok(again) = pays_charter::parse(&once) else {
+            continue;
+        };
         let twice = pays_charter::emit(&again);
         if once != twice {
             failures.push(format!(

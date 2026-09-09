@@ -69,5 +69,8 @@ fn map(d: &ChainDiagnostic, levels: &[Level]) -> Diagnostic {
 
 /// The declarations a level names, for a caller walking a chain without touching the AST.
 pub fn declaration_names(c: &Charter) -> Vec<&str> {
-    c.decls.iter().map(|d: &Decl| d.name().node.as_str()).collect()
+    c.decls
+        .iter()
+        .map(|d: &Decl| d.name().node.as_str())
+        .collect()
 }

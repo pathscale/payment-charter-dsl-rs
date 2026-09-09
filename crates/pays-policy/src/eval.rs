@@ -55,7 +55,10 @@ impl Provenance {
     /// Bare `provenance` is the tier: the maximum over the four fields, because an intent is
     /// exactly as trustworthy as its worst field (§6.1).
     pub fn tier(&self) -> Plane {
-        self.recipient.max(self.amount).max(self.asset).max(self.venue)
+        self.recipient
+            .max(self.amount)
+            .max(self.asset)
+            .max(self.venue)
     }
 }
 
@@ -117,11 +120,17 @@ pub struct Engine<'a> {
 
 impl<'a> Engine<'a> {
     pub fn new(compiled: &'a Compiled) -> Self {
-        Self { chain: alloc::vec![compiled], retired: &[] }
+        Self {
+            chain: alloc::vec![compiled],
+            retired: &[],
+        }
     }
 
     pub fn with_retired(compiled: &'a Compiled, retired: &'a [Limit]) -> Self {
-        Self { chain: alloc::vec![compiled], retired }
+        Self {
+            chain: alloc::vec![compiled],
+            retired,
+        }
     }
 
     /// Evaluate over a linked chain.
@@ -131,11 +140,17 @@ impl<'a> Engine<'a> {
     /// where the real chain answers `deny`, which is the one failure mode of §8A that produces
     /// a payment rather than an error.
     pub fn chained(chain: &Chain<'a>) -> Self {
-        Self { chain: chain.levels().to_vec(), retired: &[] }
+        Self {
+            chain: chain.levels().to_vec(),
+            retired: &[],
+        }
     }
 
     pub fn chained_with_retired(chain: &Chain<'a>, retired: &'a [Limit]) -> Self {
-        Self { chain: chain.levels().to_vec(), retired }
+        Self {
+            chain: chain.levels().to_vec(),
+            retired,
+        }
     }
 
     /// The document being enforced. Ancestors bound it; this is the one that was installed.
@@ -226,7 +241,12 @@ impl<'a> Engine<'a> {
             // declared no way to appeal is refused, and a deeper level's quorum is never
             // offered the chance to answer for it.
             if used + draw as u128 > r.ceiling as u128 {
-                match r.limit.escalations.iter().find(|e| e.trigger == Trigger::WhenExhausted) {
+                match r
+                    .limit
+                    .escalations
+                    .iter()
+                    .find(|e| e.trigger == Trigger::WhenExhausted)
+                {
                     Some(e) if is_higher(&escalation, r) => {
                         escalation = Some((r, e, "when exhausted"));
                     }
@@ -246,7 +266,9 @@ impl<'a> Engine<'a> {
         // and the company's, which is what a company-wide limit means. A pending escalation
         // holds its reservations (§8.1.5).
         let state = match &escalation {
-            Some((_, e, _)) => ReservationState::PendingApproval { expires_at: req.at + e.within },
+            Some((_, e, _)) => ReservationState::PendingApproval {
+                expires_at: req.at + e.within,
+            },
             None => ReservationState::Reserved,
         };
         let mut reservations = Vec::new();
@@ -267,7 +289,11 @@ impl<'a> Engine<'a> {
             },
             None => Outcome::Allow,
         };
-        Decision { outcome, reservations, effective_ceiling: amount_minimum(&resolved) }
+        Decision {
+            outcome,
+            reservations,
+            effective_ceiling: amount_minimum(&resolved),
+        }
     }
 
     /// Every applicable limit at every level, root first, each resolved against this request.
@@ -276,7 +302,10 @@ impl<'a> Engine<'a> {
     /// and its value is the parent's effective ceiling — so a level can only be resolved once
     /// everything above it has been, and the induction that keeps S5's bound finite runs in
     /// exactly this direction.
-    fn resolve_chain(&self, req: &Request) -> Result<Vec<Resolved<'a>>, alloc::boxed::Box<Decision>> {
+    fn resolve_chain(
+        &self,
+        req: &Request,
+    ) -> Result<Vec<Resolved<'a>>, alloc::boxed::Box<Decision>> {
         let mut out: Vec<Resolved<'a>> = Vec::new();
         // The tightest ceiling imposed so far by strictly shallower levels, per dimension. A
         // child's `unlimited` inherits from the same dimension only: a monthly spending cap is
@@ -295,7 +324,10 @@ impl<'a> Engine<'a> {
             // day.
             let mut bounded = false;
 
-            let limits = c.limits.iter().chain(if is_leaf { self.retired } else { &[] }.iter());
+            let limits = c
+                .limits
+                .iter()
+                .chain(if is_leaf { self.retired } else { &[] }.iter());
             for limit in limits {
                 if !applies(c, limit, req) {
                     continue;
@@ -313,10 +345,9 @@ impl<'a> Engine<'a> {
                     // whose parent turns out to cap nothing comparable for this request. It
                     // denies rather than defaulting, because the alternative is an unbounded
                     // ceiling reached by writing one word.
-                    return Err(alloc::boxed::Box::new(self.deny(
-                        alloc::vec![self.qualify(&c.charter_id, &limit.id)],
-                        "E315",
-                    )));
+                    return Err(alloc::boxed::Box::new(
+                        self.deny(alloc::vec![self.qualify(&c.charter_id, &limit.id)], "E315"),
+                    ));
                 };
                 match limit.dimension {
                     Dimension::Amount => {
@@ -326,7 +357,12 @@ impl<'a> Engine<'a> {
                         level_count = Some(level_count.map_or(ceiling, |m: u64| m.min(ceiling)))
                     }
                 }
-                out.push(Resolved { depth, level: &c.charter_id, limit, ceiling });
+                out.push(Resolved {
+                    depth,
+                    level: &c.charter_id,
+                    limit,
+                    ceiling,
+                });
             }
 
             if !bounded {
@@ -334,7 +370,11 @@ impl<'a> Engine<'a> {
                 // "permitted" in a document whose purpose is to bound spending, and there is no
                 // inheritance of permission by omission either. A level that caps nothing
                 // applicable to this request has not authorised it.
-                let code = if self.chain.len() == 1 { "E219" } else { "E315" };
+                let code = if self.chain.len() == 1 {
+                    "E219"
+                } else {
+                    "E315"
+                };
                 let by = if self.chain.len() == 1 {
                     Vec::new()
                 } else {
@@ -397,7 +437,13 @@ impl<'a> Engine<'a> {
         }
     }
 
-    fn exposure(&self, ledger: &Ledger, limit: &Limit, key: &AccumulatorKey, req: &Request) -> u128 {
+    fn exposure(
+        &self,
+        ledger: &Ledger,
+        limit: &Limit,
+        key: &AccumulatorKey,
+        req: &Request,
+    ) -> u128 {
         match limit.window {
             Window::Rolling { seconds } => ledger.exposure_since(key, req.at - seconds),
             Window::Fixed { .. } => ledger.exposure(key),
@@ -436,7 +482,6 @@ fn amount_minimum(rs: &[Resolved]) -> Option<u64> {
         .map(|r| r.ceiling)
         .min()
 }
-
 
 /// S23: does this limit constrain this request?
 ///
@@ -499,7 +544,11 @@ pub fn eval(s: &Selector, req: &Request) -> bool {
         Selector::And(a, b) => eval(a, req) && eval(b, req),
         Selector::Or(a, b) => eval(a, req) || eval(b, req),
         Selector::Not(a) => !eval(a, req),
-        Selector::Is { field, values, negated } => {
+        Selector::Is {
+            field,
+            values,
+            negated,
+        } => {
             let hit = values.iter().any(|v| atom_matches(*field, v, req));
             hit != *negated
         }

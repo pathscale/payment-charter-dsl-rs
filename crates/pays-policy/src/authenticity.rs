@@ -275,7 +275,6 @@ mod tests {
     // Not in the no_std prelude, and the lib itself does not need it — which is why a
     // build-only check missed this and only `cargo test` caught it.
     use alloc::string::ToString;
-    
 
     #[test]
     fn sha256_matches_the_published_vectors() {
@@ -346,7 +345,15 @@ mod tests {
     fn a_well_formed_commitment_verifies() {
         let (c, compiled, sig) = fixture();
         assert_eq!(
-            verify(&c, &sig, &compiled, "acme-treasury", 1_788_300_000, &Trusted("controller-1"), &versions()),
+            verify(
+                &c,
+                &sig,
+                &compiled,
+                "acme-treasury",
+                1_788_300_000,
+                &Trusted("controller-1"),
+                &versions()
+            ),
             Ok(())
         );
     }
@@ -355,7 +362,15 @@ mod tests {
     fn an_unknown_key_is_refused_before_anything_else() {
         let (c, compiled, sig) = fixture();
         assert_eq!(
-            verify(&c, &sig, &compiled, "acme-treasury", 1_788_300_000, &Trusted("someone-else"), &versions()),
+            verify(
+                &c,
+                &sig,
+                &compiled,
+                "acme-treasury",
+                1_788_300_000,
+                &Trusted("someone-else"),
+                &versions()
+            ),
             Err(AuthError::UnknownKey)
         );
     }
@@ -375,7 +390,15 @@ mod tests {
             let mut c = base.clone();
             mutate(&mut c);
             assert_eq!(
-                verify(&c, &sig, &compiled, &c.charter.clone(), 1_788_300_000, &Trusted("controller-1"), &versions()),
+                verify(
+                    &c,
+                    &sig,
+                    &compiled,
+                    &c.charter.clone(),
+                    1_788_300_000,
+                    &Trusted("controller-1"),
+                    &versions()
+                ),
                 Err(AuthError::SignatureInvalid),
             );
         }
@@ -387,7 +410,15 @@ mod tests {
         // different compiled form.
         let (c, _, sig) = fixture();
         assert_eq!(
-            verify(&c, &sig, b"different bytes", "acme-treasury", 1_788_300_000, &Trusted("controller-1"), &versions()),
+            verify(
+                &c,
+                &sig,
+                b"different bytes",
+                "acme-treasury",
+                1_788_300_000,
+                &Trusted("controller-1"),
+                &versions()
+            ),
             Err(AuthError::CompiledDigestMismatch)
         );
     }
@@ -398,13 +429,29 @@ mod tests {
         let mut v = versions();
         v.0.insert("acme-treasury".to_string(), 7);
         assert_eq!(
-            verify(&c, &sig, &compiled, "acme-treasury", 1_788_300_000, &Trusted("controller-1"), &v),
+            verify(
+                &c,
+                &sig,
+                &compiled,
+                "acme-treasury",
+                1_788_300_000,
+                &Trusted("controller-1"),
+                &v
+            ),
             Err(AuthError::VersionNotMonotonic),
             "last quarter's more generous charter must not come back"
         );
         v.0.insert("acme-treasury".to_string(), 6);
         assert_eq!(
-            verify(&c, &sig, &compiled, "acme-treasury", 1_788_300_000, &Trusted("controller-1"), &v),
+            verify(
+                &c,
+                &sig,
+                &compiled,
+                "acme-treasury",
+                1_788_300_000,
+                &Trusted("controller-1"),
+                &v
+            ),
             Ok(())
         );
     }
@@ -413,7 +460,15 @@ mod tests {
     fn a_commitment_for_another_charter_does_not_replay() {
         let (c, compiled, sig) = fixture();
         assert_eq!(
-            verify(&c, &sig, &compiled, "restrictive-charter", 1_788_300_000, &Trusted("controller-1"), &versions()),
+            verify(
+                &c,
+                &sig,
+                &compiled,
+                "restrictive-charter",
+                1_788_300_000,
+                &Trusted("controller-1"),
+                &versions()
+            ),
             Err(AuthError::CharterNameMismatch)
         );
     }
@@ -421,7 +476,17 @@ mod tests {
     #[test]
     fn validity_is_half_open() {
         let (c, compiled, sig) = fixture();
-        let at = |t| verify(&c, &sig, &compiled, "acme-treasury", t, &Trusted("controller-1"), &versions());
+        let at = |t| {
+            verify(
+                &c,
+                &sig,
+                &compiled,
+                "acme-treasury",
+                t,
+                &Trusted("controller-1"),
+                &versions(),
+            )
+        };
         assert_eq!(at(c.not_before - 1), Err(AuthError::OutsideValidity));
         assert_eq!(at(c.not_before), Ok(()));
         assert_eq!(at(c.not_after - 1), Ok(()));
@@ -437,7 +502,15 @@ mod tests {
         let (c, _, _) = fixture();
         let s = jcs(&c);
         assert!(!s.contains(' '), "JCS emits no whitespace: {s}");
-        let order = ["charter", "compiled_digest", "key_id", "not_after", "not_before", "text_digest", "version"];
+        let order = [
+            "charter",
+            "compiled_digest",
+            "key_id",
+            "not_after",
+            "not_before",
+            "text_digest",
+            "version",
+        ];
         let mut last = 0;
         for k in order {
             let at = s.find(k).unwrap_or_else(|| panic!("{k} missing from {s}"));

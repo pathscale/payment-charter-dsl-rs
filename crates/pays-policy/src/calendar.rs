@@ -134,7 +134,11 @@ mod tests {
     fn quarter_hour_offsets_work() {
         let t = days_from_civil(2026, 9, 1) * 86400;
         // UTC+05:45 is a real offset, and the boundary lands 5h45m earlier in UTC terms.
-        let a = fixed_window(t - (5 * 3600 + 45 * 60) - 1, 5 * 3600 + 45 * 60, CalUnit::Day);
+        let a = fixed_window(
+            t - (5 * 3600 + 45 * 60) - 1,
+            5 * 3600 + 45 * 60,
+            CalUnit::Day,
+        );
         let b = fixed_window(t - (5 * 3600 + 45 * 60), 5 * 3600 + 45 * 60, CalUnit::Day);
         assert_eq!(b - a, 1);
     }
@@ -143,7 +147,10 @@ mod tests {
     fn months_and_years_are_calendar_boundaries() {
         let jan = days_from_civil(2026, 1, 31) * 86400;
         let feb = days_from_civil(2026, 2, 1) * 86400;
-        assert_ne!(fixed_window(jan, 0, CalUnit::Month), fixed_window(feb, 0, CalUnit::Month));
+        assert_ne!(
+            fixed_window(jan, 0, CalUnit::Month),
+            fixed_window(feb, 0, CalUnit::Month)
+        );
         assert_eq!(
             fixed_window(feb, 0, CalUnit::Month),
             fixed_window(days_from_civil(2026, 2, 28) * 86400, 0, CalUnit::Month)
@@ -160,7 +167,13 @@ mod tests {
         let thu = days_from_civil(2026, 9, 3) * 86400;
         let mon = days_from_civil(2026, 8, 31) * 86400;
         let sun = days_from_civil(2026, 8, 30) * 86400;
-        assert_eq!(fixed_window(thu, 0, CalUnit::Week), fixed_window(mon, 0, CalUnit::Week));
-        assert_ne!(fixed_window(sun, 0, CalUnit::Week), fixed_window(mon, 0, CalUnit::Week));
+        assert_eq!(
+            fixed_window(thu, 0, CalUnit::Week),
+            fixed_window(mon, 0, CalUnit::Week)
+        );
+        assert_ne!(
+            fixed_window(sun, 0, CalUnit::Week),
+            fixed_window(mon, 0, CalUnit::Week)
+        );
     }
 }

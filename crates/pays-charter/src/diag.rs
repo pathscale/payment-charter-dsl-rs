@@ -27,11 +27,23 @@ pub struct Diagnostic {
 
 impl Diagnostic {
     pub fn error(code: &'static str, message: impl Into<String>, span: Span) -> Self {
-        Self { severity: Severity::Error, code, message: message.into(), span, related: None }
+        Self {
+            severity: Severity::Error,
+            code,
+            message: message.into(),
+            span,
+            related: None,
+        }
     }
 
     pub fn warning(code: &'static str, message: impl Into<String>, span: Span) -> Self {
-        Self { severity: Severity::Warning, code, message: message.into(), span, related: None }
+        Self {
+            severity: Severity::Warning,
+            code,
+            message: message.into(),
+            span,
+            related: None,
+        }
     }
 
     pub fn with_related(mut self, span: Span, note: impl Into<String>) -> Self {
@@ -62,7 +74,10 @@ impl Diagnostic {
 fn line_col(src: &str, at: usize) -> (usize, usize) {
     let upto = &src[..at.min(src.len())];
     let line = upto.matches('\n').count() + 1;
-    let col = upto.rsplit('\n').next().map_or(1, |l| l.chars().count() + 1);
+    let col = upto
+        .rsplit('\n')
+        .next()
+        .map_or(1, |l| l.chars().count() + 1);
     (line, col)
 }
 

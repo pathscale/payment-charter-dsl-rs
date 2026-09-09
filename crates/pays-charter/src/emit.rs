@@ -18,7 +18,10 @@ pub fn emit(c: &Charter) -> String {
     if let Some((parent, v)) = &c.extends {
         out.push(format!("extends {}@{}", parent.node, v));
     }
-    out.push(format!("resolver {}@{}", c.resolver_tier.node, c.resolver_version));
+    out.push(format!(
+        "resolver {}@{}",
+        c.resolver_tier.node, c.resolver_version
+    ));
     out.push(format!("timezone {}", c.timezone.node));
     out.push(String::new());
 
@@ -77,7 +80,10 @@ fn declaration(d: &Decl) -> Vec<String> {
             vec![format!("  asset group {} = {}", g.name.node, set(&members))]
         }
         Decl::Instrument(i) => {
-            vec![format!("  instrument {} = {}", i.name.node, i.reference.node)]
+            vec![format!(
+                "  instrument {} = {}",
+                i.name.node, i.reference.node
+            )]
         }
         Decl::Group(g) => {
             let members: Vec<String> = g.members.iter().map(|m| m.node.to_string()).collect();
@@ -89,7 +95,11 @@ fn declaration(d: &Decl) -> Vec<String> {
             vec![format!("  approvers {} = {}", a.name.node, set(&members))]
         }
         Decl::Prohibit(p) => {
-            vec![format!("  prohibit {} when {}", p.name.node, condition(&p.condition, 0))]
+            vec![format!(
+                "  prohibit {} when {}",
+                p.name.node,
+                condition(&p.condition, 0)
+            )]
         }
         Decl::Limit(l) => limit(l),
     }
@@ -114,7 +124,13 @@ fn limit(l: &LimitDecl) -> Vec<String> {
     // order carries no meaning.
     let mut lines: Vec<String> = exceptions
         .iter()
-        .map(|e| format!("except {} when {}", exc_value(&e.value.node), condition(&e.condition, 0)))
+        .map(|e| {
+            format!(
+                "except {} when {}",
+                exc_value(&e.value.node),
+                condition(&e.condition, 0)
+            )
+        })
         .collect();
     lines.sort();
     for e in lines {
@@ -227,7 +243,12 @@ fn condition(c: &Condition, parent: u8) -> String {
         }
         Condition::Not(a) => format!("not {}", condition(a, 3)),
         Condition::Compare(cmp) => {
-            format!("{} {} {}", cmp.field.node, cmp.operator.node, value(&cmp.value.node))
+            format!(
+                "{} {} {}",
+                cmp.field.node,
+                cmp.operator.node,
+                value(&cmp.value.node)
+            )
         }
     }
 }

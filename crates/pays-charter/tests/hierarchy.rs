@@ -33,12 +33,19 @@ fn corpus() -> Option<PathBuf> {
 
 fn minor_units(s: &str, decimals: u8) -> u64 {
     let (whole, frac) = s.split_once('.').unwrap_or((s, ""));
-    assert!(frac.len() <= decimals as usize, "{s} exceeds {decimals} decimals");
+    assert!(
+        frac.len() <= decimals as usize,
+        "{s} exceeds {decimals} decimals"
+    );
     let mut padded = frac.to_string();
     while padded.len() < decimals as usize {
         padded.push('0');
     }
-    let f: u64 = if padded.is_empty() { 0 } else { padded.parse().unwrap() };
+    let f: u64 = if padded.is_empty() {
+        0
+    } else {
+        padded.parse().unwrap()
+    };
     whole.parse::<u64>().unwrap() * 10u64.pow(decimals as u32) + f
 }
 
@@ -60,7 +67,9 @@ fn load(root: &Path, rel: &str) -> Result<Doc, String> {
 fn load_chain(root: &Path, names: &[Json]) -> Result<Vec<Doc>, String> {
     let mut out = Vec::new();
     for n in names {
-        let Json::Str(rel) = n else { return Err("a chain names charter paths".into()) };
+        let Json::Str(rel) = n else {
+            return Err("a chain names charter paths".into());
+        };
         out.push(load(root, rel)?);
     }
     Ok(out)
@@ -78,21 +87,34 @@ fn run_vector(root: &Path, path: &Path) -> VectorResult {
     let mut failures = Vec::new();
 
     let Some(names) = v.arr("chain") else {
-        return VectorResult { name, failures: vec!["vector names no chain".into()] };
+        return VectorResult {
+            name,
+            failures: vec!["vector names no chain".into()],
+        };
     };
     let mut docs = match load_chain(root, names) {
         Ok(d) => d,
-        Err(e) => return VectorResult { name, failures: vec![e] },
+        Err(e) => {
+            return VectorResult {
+                name,
+                failures: vec![e],
+            }
+        }
     };
 
-    let levels: Vec<Level> = docs.iter().map(|d| Level::new(&d.ast, &d.compiled)).collect();
+    let levels: Vec<Level> = docs
+        .iter()
+        .map(|d| Level::new(&d.ast, &d.compiled))
+        .collect();
     let linked = link(&levels);
 
     // A vector may assert that the chain does not link at all. That is a complete assertion:
     // nothing downstream of a refused link is meaningful, so the vector ends here.
     if let Some(want) = v.str("expect_link") {
         match &linked {
-            Ok(_) => failures.push(format!("expected the chain to be refused with {want}; it linked")),
+            Ok(_) => failures.push(format!(
+                "expected the chain to be refused with {want}; it linked"
+            )),
             Err(ds) => {
                 if !ds.iter().any(|d| d.code == want) {
                     failures.push(format!(
@@ -143,8 +165,10 @@ fn run_vector(root: &Path, path: &Path) -> VectorResult {
             match load_chain(root, next) {
                 Ok(d) => {
                     docs = d;
-                    let levels: Vec<Level> =
-                        docs.iter().map(|x| Level::new(&x.ast, &x.compiled)).collect();
+                    let levels: Vec<Level> = docs
+                        .iter()
+                        .map(|x| Level::new(&x.ast, &x.compiled))
+                        .collect();
                     match link(&levels) {
                         Ok((c, _)) => chain = c,
                         Err(ds) => {
@@ -161,7 +185,9 @@ fn run_vector(root: &Path, path: &Path) -> VectorResult {
             continue;
         }
 
-        let Some(expect) = step.str("expect") else { continue };
+        let Some(expect) = step.str("expect") else {
+            continue;
+        };
 
         let tagged = step.str("category");
         let plane = step
@@ -176,7 +202,9 @@ fn run_vector(root: &Path, path: &Path) -> VectorResult {
             instrument: step.str("instrument").map(str::to_string),
             counterparty: step.str("counterparty").map(str::to_string),
             mcc: tagged.filter(|t| t.starts_with("mcc:")).map(str::to_string),
-            country: tagged.filter(|t| t.starts_with("country:")).map(str::to_string),
+            country: tagged
+                .filter(|t| t.starts_with("country:"))
+                .map(str::to_string),
             agent: step.str("agent").map(str::to_string),
             account: step.str("account").map(str::to_string),
             provenance: pays_policy::eval::Provenance {
@@ -240,8 +268,17 @@ fn run_vector(root: &Path, path: &Path) -> VectorResult {
             }
         }
 
-        if let (Outcome::Escalate { level, limit, trigger, approvers, quorum, .. }, Some(e)) =
-            (&decision.outcome, step.get("escalation"))
+        if let (
+            Outcome::Escalate {
+                level,
+                limit,
+                trigger,
+                approvers,
+                quorum,
+                ..
+            },
+            Some(e),
+        ) = (&decision.outcome, step.get("escalation"))
         {
             let mut want = |field: &str, got: &str| {
                 if let Some(w) = e.str(field) {
@@ -291,7 +328,11 @@ fn hierarchy_vectors() {
         .filter(|p| p.extension().is_some_and(|x| x == "json"))
         .collect();
     files.sort();
-    assert!(!files.is_empty(), "no hierarchy vectors found in {}", dir.display());
+    assert!(
+        !files.is_empty(),
+        "no hierarchy vectors found in {}",
+        dir.display()
+    );
 
     let mut failed = Vec::new();
     for f in &files {
@@ -306,5 +347,10 @@ fn hierarchy_vectors() {
             failed.push(r.name);
         }
     }
-    assert!(failed.is_empty(), "{} of {} vectors failed: {failed:?}", failed.len(), files.len());
+    assert!(
+        failed.is_empty(),
+        "{} of {} vectors failed: {failed:?}",
+        failed.len(),
+        files.len()
+    );
 }

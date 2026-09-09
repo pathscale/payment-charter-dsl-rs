@@ -23,7 +23,9 @@ fn main() {
     match pays_charter::compile(&ast, &pays_charter::Resolver::uniform(2)) {
         Ok(c) => {
             use std::io::Write;
-            std::io::stdout().write_all(&pays_policy::compiled::encode(&c)).unwrap();
+            std::io::stdout()
+                .write_all(&pays_policy::compiled::encode(&c))
+                .unwrap();
         }
         Err(d) => {
             for x in &d {

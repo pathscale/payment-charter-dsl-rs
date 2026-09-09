@@ -10,18 +10,18 @@ pub mod ast;
 pub mod compile;
 pub mod diag;
 pub mod emit;
+pub mod json;
 pub mod lex;
 pub mod link;
-pub mod json;
 pub mod parse;
 pub mod resolver;
 pub mod rules;
 
-pub use diag::{Diagnostic, Severity};
 pub use compile::compile;
-pub use resolver::Resolver;
+pub use diag::{Diagnostic, Severity};
 pub use emit::emit;
 pub use parse::parse;
+pub use resolver::Resolver;
 
 /// Parse and apply the static rules. Errors and warnings come back together; a caller that
 /// wants only errors filters on [`Diagnostic::is_error`].

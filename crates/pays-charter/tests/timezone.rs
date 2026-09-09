@@ -10,7 +10,14 @@ fn charter(tz: &str) -> String {
 
 #[test]
 fn offsets_are_accepted() {
-    for tz in ["UTC", "UTC+00:00", "UTC+14:00", "UTC-12:00", "UTC+05:45", "UTC+09:30"] {
+    for tz in [
+        "UTC",
+        "UTC+00:00",
+        "UTC+14:00",
+        "UTC-12:00",
+        "UTC+05:45",
+        "UTC+09:30",
+    ] {
         let r = pays_charter::check(&charter(tz));
         assert!(r.is_ok(), "{tz} should compile: {:?}", r.err());
     }
@@ -21,8 +28,16 @@ fn a_zone_name_names_the_replacement() {
     // The mistake worth diagnosing well: it is what every other system takes.
     let errs = pays_charter::check(&charter("Europe/London")).unwrap_err();
     assert!(errs.iter().any(|e| e.code == "E206"), "{errs:?}");
-    let msg = errs.iter().find(|e| e.code == "E206").unwrap().message.clone();
-    assert!(msg.contains("UTC+01:00"), "the error should name the replacement: {msg}");
+    let msg = errs
+        .iter()
+        .find(|e| e.code == "E206")
+        .unwrap()
+        .message
+        .clone();
+    assert!(
+        msg.contains("UTC+01:00"),
+        "the error should name the replacement: {msg}"
+    );
 }
 
 #[test]
@@ -47,10 +62,23 @@ fn the_boundary_offsets_are_the_boundary() {
     // +14:00 and -12:00 are real offsets and must pass; one quarter-hour past either must not.
     assert!(pays_charter::check(&charter("UTC+14:00")).is_ok());
     assert!(pays_charter::check(&charter("UTC-12:00")).is_ok());
-    for over in ["UTC+14:15", "UTC-12:15", "UTC+15:00", "UTC-13:00", "UTC+99:00"] {
+    for over in [
+        "UTC+14:15",
+        "UTC-12:15",
+        "UTC+15:00",
+        "UTC-13:00",
+        "UTC+99:00",
+    ] {
         let errs = pays_charter::check(&charter(over)).unwrap_err();
-        let e = errs.iter().find(|e| e.code == "E206").unwrap_or_else(|| panic!("{over}: {errs:?}"));
-        assert!(e.message.contains("-12:00 ..= +14:00"), "{over}: {}", e.message);
+        let e = errs
+            .iter()
+            .find(|e| e.code == "E206")
+            .unwrap_or_else(|| panic!("{over}: {errs:?}"));
+        assert!(
+            e.message.contains("-12:00 ..= +14:00"),
+            "{over}: {}",
+            e.message
+        );
     }
 }
 
@@ -61,7 +89,10 @@ fn a_malformed_offset_is_an_offset_error_not_a_lexical_one() {
     // shape rule enforced by a token failing to match.
     for near in ["UTC+1:00", "UTC+5:45", "UTC+0100", "UTC+10:0", "UTC+:00"] {
         let errs = pays_charter::check(&charter(near)).unwrap_err();
-        let e = errs.iter().find(|e| e.code == "E206").unwrap_or_else(|| panic!("{near}: {errs:?}"));
+        let e = errs
+            .iter()
+            .find(|e| e.code == "E206")
+            .unwrap_or_else(|| panic!("{near}: {errs:?}"));
         assert!(e.message.contains("two digits"), "{near}: {}", e.message);
     }
 }

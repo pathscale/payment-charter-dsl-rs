@@ -13,8 +13,8 @@ fn corpus() -> Option<PathBuf> {
         let p = PathBuf::from(p);
         return p.is_dir().then_some(p);
     }
-    let sibling = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../payment-charter-dsl/conformance");
+    let sibling =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../payment-charter-dsl/conformance");
     sibling.is_dir().then(|| sibling.canonicalize().unwrap())
 }
 
@@ -57,7 +57,10 @@ fn every_reject_fixture_declares_its_code() {
             bad.push(f);
         }
     }
-    assert!(bad.is_empty(), "reject fixtures with no `# expect:` in the leading block: {bad:#?}");
+    assert!(
+        bad.is_empty(),
+        "reject fixtures with no `# expect:` in the leading block: {bad:#?}"
+    );
 }
 
 /// Parse-level accept: the fixture must at least tokenise and parse. Static rules are a
@@ -83,7 +86,11 @@ fn accept_fixtures_parse() {
             }
         }
     }
-    assert!(failures.is_empty(), "accept fixtures that failed to parse:\n{}", failures.join("\n"));
+    assert!(
+        failures.is_empty(),
+        "accept fixtures that failed to parse:\n{}",
+        failures.join("\n")
+    );
 }
 
 /// Reject fixtures whose expected code is a *parse-or-lex* one must produce exactly that
@@ -97,9 +104,9 @@ fn reject_fixtures_report_the_right_code() {
     };
     // Codes this crate can currently decide. Everything else is a static rule.
     const DECIDED: &[&str] = &[
-        "E101", "E102", "E103", "E201", "E210", "E211", "E212", "E213", "E214", "E215",
-        "E216", "E217", "E218", "E220", "E222", "E306", "E307", "E308", "E309", "E310",
-        "E311", "E312", "E314", "E316", "E317", "E403", "E410", "E411", "E413",
+        "E101", "E102", "E103", "E201", "E210", "E211", "E212", "E213", "E214", "E215", "E216",
+        "E217", "E218", "E220", "E222", "E306", "E307", "E308", "E309", "E310", "E311", "E312",
+        "E314", "E316", "E317", "E403", "E410", "E411", "E413",
     ];
 
     let mut wrong = Vec::new();
@@ -108,11 +115,17 @@ fn reject_fixtures_report_the_right_code() {
         let src = std::fs::read_to_string(&f).unwrap();
         let want = expected_code(&src).expect("checked by the fixture test");
         let got = pays_charter::check(&src).err().map(|es| {
-            es.iter().filter(|d| d.is_error()).map(|d| d.code.to_string()).collect::<Vec<_>>()
+            es.iter()
+                .filter(|d| d.is_error())
+                .map(|d| d.code.to_string())
+                .collect::<Vec<_>>()
         });
 
         if !DECIDED.contains(&want.as_str()) {
-            deferred.push(format!("{} wants {want}", f.file_name().unwrap().to_string_lossy()));
+            deferred.push(format!(
+                "{} wants {want}",
+                f.file_name().unwrap().to_string_lossy()
+            ));
             continue;
         }
         match got {
@@ -128,11 +141,18 @@ fn reject_fixtures_report_the_right_code() {
         }
     }
     // Report what is not yet covered rather than passing quietly over it.
-    eprintln!("{} reject fixtures await the static-rules pass:", deferred.len());
+    eprintln!(
+        "{} reject fixtures await the static-rules pass:",
+        deferred.len()
+    );
     for d in &deferred {
         eprintln!("  {d}");
     }
-    assert!(wrong.is_empty(), "wrong error code:\n  {}", wrong.join("\n  "));
+    assert!(
+        wrong.is_empty(),
+        "wrong error code:\n  {}",
+        wrong.join("\n  ")
+    );
 }
 
 /// `type-table/`: §6's field × operator cross product, generated rather than hand-written.
@@ -148,7 +168,11 @@ fn type_table_cross_product() {
         return;
     }
     let files = charters(&dir);
-    assert!(files.len() >= 80, "expected the full cross product, found {}", files.len());
+    assert!(
+        files.len() >= 80,
+        "expected the full cross product, found {}",
+        files.len()
+    );
 
     let mut failures = Vec::new();
     let (mut accepted, mut rejected) = (0, 0);
@@ -210,7 +234,11 @@ fn resolver_fixtures() {
             }
         };
         let diags = pays_charter::resolver::check(&ast, &resolver);
-        let codes: Vec<&str> = diags.iter().filter(|d| d.is_error()).map(|d| d.code).collect();
+        let codes: Vec<&str> = diags
+            .iter()
+            .filter(|d| d.is_error())
+            .map(|d| d.code)
+            .collect();
 
         match &want {
             Some(code) if codes.contains(&code.as_str()) => {}
@@ -249,7 +277,10 @@ fn ported_fixtures() {
             src.contains("Derived from CatalaLang/catala"),
             "{name} has no provenance header"
         );
-        assert!(src.contains("Apache-2.0"), "{name} does not name the upstream licence");
+        assert!(
+            src.contains("Apache-2.0"),
+            "{name} does not name the upstream licence"
+        );
 
         let want = expected_code(&src);
         match (&want, pays_charter::check(&src)) {

@@ -68,7 +68,10 @@ impl Resolver {
     /// A resolver that reports the same scale for every asset and verifies nothing. For
     /// fixtures whose subject is not the resolver; the name says so at every call site.
     pub fn uniform(decimals: u8) -> Self {
-        Self { uniform_decimals: Some(decimals), ..Default::default() }
+        Self {
+            uniform_decimals: Some(decimals),
+            ..Default::default()
+        }
     }
 
     pub fn from_json(src: &str) -> Result<Self, String> {
@@ -93,12 +96,16 @@ impl Resolver {
                 },
                 since_version: m.num("since_version").unwrap_or(0.0) as u64,
             };
-            r.mints.insert((rec.chain.clone(), rec.mint_id.clone()), rec);
+            r.mints
+                .insert((rec.chain.clone(), rec.mint_id.clone()), rec);
         }
         for u in v.arr("units").unwrap_or(&[]) {
             let rec = UnitRecord {
                 code: u.str("code").ok_or("unit has no code")?.to_string(),
-                authority: u.str("authority").ok_or("unit has no authority")?.to_string(),
+                authority: u
+                    .str("authority")
+                    .ok_or("unit has no authority")?
+                    .to_string(),
                 decimals: u.num("decimals").ok_or("unit has no decimals")? as u8,
                 rate_sources: u
                     .arr("rate_sources")
@@ -110,7 +117,8 @@ impl Resolver {
                     })
                     .collect(),
             };
-            r.units.insert((rec.code.clone(), rec.authority.clone()), rec);
+            r.units
+                .insert((rec.code.clone(), rec.authority.clone()), rec);
         }
         Ok(r)
     }
@@ -129,9 +137,9 @@ impl Resolver {
             return Some(d);
         }
         match r {
-            AssetRef::Mint { mint_id, chain, .. } => {
-                self.mint(&chain.to_string(), &mint_id.text).map(|m| m.decimals)
-            }
+            AssetRef::Mint { mint_id, chain, .. } => self
+                .mint(&chain.to_string(), &mint_id.text)
+                .map(|m| m.decimals),
             AssetRef::Unit { code, authority } => {
                 self.unit(&code.text, &authority.text).map(|u| u.decimals)
             }
@@ -169,7 +177,13 @@ pub fn check(c: &Charter, r: &Resolver) -> Vec<Diagnostic> {
     for decl in &c.decls {
         let Decl::Asset(a) = decl else { continue };
         match &a.reference.node {
-            AssetRef::Mint { symbol, issuer, mint_id, chain, from_caip19 } => {
+            AssetRef::Mint {
+                symbol,
+                issuer,
+                mint_id,
+                chain,
+                from_caip19,
+            } => {
                 let Some(rec) = r.mint(&chain.to_string(), &mint_id.text) else {
                     // "Never seen" and "fine" must not produce the same outcome.
                     d.push(Diagnostic::error(
@@ -335,7 +349,9 @@ mod tests {
 
     #[test]
     fn the_common_tier_loads() {
-        let Some(r) = resolver() else { return no_corpus() };
+        let Some(r) = resolver() else {
+            return no_corpus();
+        };
         assert_eq!(r.version, 41);
         assert!(r.mint(SOL, USDC_MINT).is_some());
     }
@@ -346,7 +362,9 @@ mod tests {
             &format!("asset USDC_circle = mint://USDC/Circle/{USDC_MINT}/{SOL}"),
             "USDC_circle",
         );
-        let Some(d) = check_src(&src) else { return no_corpus() };
+        let Some(d) = check_src(&src) else {
+            return no_corpus();
+        };
         assert!(codes(&d).is_empty(), "{d:?}");
     }
 
@@ -358,7 +376,9 @@ mod tests {
             &format!("asset USDT_circle = mint://USDT/Circle/{USDC_MINT}/{SOL}"),
             "USDT_circle",
         );
-        let Some(d) = check_src(&src) else { return no_corpus() };
+        let Some(d) = check_src(&src) else {
+            return no_corpus();
+        };
         assert_eq!(codes(&d), vec!["E401"]);
         assert!(d[0].message.contains("USDC"), "{}", d[0].message);
     }
@@ -369,9 +389,15 @@ mod tests {
             &format!("asset USDC_wormhole = mint://USDC/Wormhole/{USDC_MINT}/{SOL}"),
             "USDC_wormhole",
         );
-        let Some(d) = check_src(&src) else { return no_corpus() };
+        let Some(d) = check_src(&src) else {
+            return no_corpus();
+        };
         assert_eq!(codes(&d), vec!["E401"]);
-        assert!(d[0].message.contains("native from bridged"), "{}", d[0].message);
+        assert!(
+            d[0].message.contains("native from bridged"),
+            "{}",
+            d[0].message
+        );
     }
 
     #[test]
@@ -380,7 +406,9 @@ mod tests {
             &format!("asset USDC_unknown = mint://USDC/Circle/9zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz/{SOL}"),
             "USDC_unknown",
         );
-        let Some(d) = check_src(&src) else { return no_corpus() };
+        let Some(d) = check_src(&src) else {
+            return no_corpus();
+        };
         assert_eq!(codes(&d), vec!["E402"]);
     }
 
@@ -390,7 +418,9 @@ mod tests {
             &format!("asset STSOL_lido = mint://STSOL/Lido/7dHbWXmci3dT8UFYWYZweBLXgycu7Y3iL6trKn1Y7ARj/{SOL}"),
             "STSOL_lido",
         );
-        let Some(d) = check_src(&src) else { return no_corpus() };
+        let Some(d) = check_src(&src) else {
+            return no_corpus();
+        };
         assert_eq!(codes(&d), vec!["E406"]);
     }
 
@@ -400,7 +430,9 @@ mod tests {
             "asset DAI_maker = mint://DAI/MakerDAO/0x6b175474e89094c44da98b954eedeac495271d0f/eip155:1",
             "DAI_maker",
         );
-        let Some(d) = check_src(&src) else { return no_corpus() };
+        let Some(d) = check_src(&src) else {
+            return no_corpus();
+        };
         assert_eq!(codes(&d), vec!["E223"]);
         assert!(d[0].message.contains("18.44 tokens"), "{}", d[0].message);
     }
@@ -413,7 +445,9 @@ mod tests {
             &format!("asset USDC_circle = mint://USDC/Circle/4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU/{SOL}"),
             "USDC_circle",
         );
-        let Some(d) = check_src(&src) else { return no_corpus() };
+        let Some(d) = check_src(&src) else {
+            return no_corpus();
+        };
         assert_eq!(codes(&d), vec!["E402"]);
     }
 
@@ -424,14 +458,18 @@ mod tests {
             &format!("asset USDC_circle = asset://{SOL}/token:{USDC_MINT}"),
             "USDC_circle",
         );
-        let Some(d) = check_src(&src) else { return no_corpus() };
+        let Some(d) = check_src(&src) else {
+            return no_corpus();
+        };
         assert!(codes(&d).is_empty(), "{d:?}");
     }
 
     #[test]
     fn a_unit_limit_without_a_rate_source_is_refused() {
         let src = one_asset("asset USD_iso4217 = unit://USD/ISO4217", "USD_iso4217");
-        let Some(d) = check_src(&src) else { return no_corpus() };
+        let Some(d) = check_src(&src) else {
+            return no_corpus();
+        };
         assert_eq!(codes(&d), vec!["E404"]);
     }
 
@@ -442,7 +480,9 @@ mod tests {
             "USDC_circle",
         )
         .replace("resolver common@41", "resolver common@99");
-        let Some(d) = check_src(&src) else { return no_corpus() };
+        let Some(d) = check_src(&src) else {
+            return no_corpus();
+        };
         assert_eq!(codes(&d), vec!["E405"]);
     }
 

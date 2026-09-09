@@ -48,7 +48,7 @@ impl Json {
 pub fn parse(s: &str) -> Json {
     let b: Vec<char> = s.chars().collect();
     let mut i = 0;
-    
+
     value(&b, &mut i)
 }
 
@@ -70,7 +70,9 @@ fn value(b: &[char], i: &mut usize) -> Json {
                     *i += 1;
                     break;
                 }
-                let Json::Str(k) = value(b, i) else { panic!("object key") };
+                let Json::Str(k) = value(b, i) else {
+                    panic!("object key")
+                };
                 skip_ws(b, i);
                 assert_eq!(b.get(*i), Some(&':'), "expected ':'");
                 *i += 1;
@@ -143,4 +145,3 @@ fn value(b: &[char], i: &mut usize) -> Json {
         }
     }
 }
-

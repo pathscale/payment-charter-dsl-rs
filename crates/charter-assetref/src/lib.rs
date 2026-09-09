@@ -29,7 +29,10 @@ pub struct Segment {
 
 impl Segment {
     fn new(text: &str, span: Span) -> Self {
-        Self { text: text.to_string(), span }
+        Self {
+            text: text.to_string(),
+            span,
+        }
     }
 }
 
@@ -97,13 +100,31 @@ impl AssetRef {
     pub fn same_asset(&self, other: &AssetRef) -> bool {
         match (self, other) {
             (
-                AssetRef::Mint { mint_id: a, chain: ca, .. },
-                AssetRef::Mint { mint_id: b, chain: cb, .. },
-            ) => a.text == b.text && ca.namespace.text == cb.namespace.text
-                && ca.reference.text == cb.reference.text,
-            (AssetRef::Unit { code: a, authority: x }, AssetRef::Unit { code: b, authority: y }) => {
-                a.text == b.text && x.text == y.text
+                AssetRef::Mint {
+                    mint_id: a,
+                    chain: ca,
+                    ..
+                },
+                AssetRef::Mint {
+                    mint_id: b,
+                    chain: cb,
+                    ..
+                },
+            ) => {
+                a.text == b.text
+                    && ca.namespace.text == cb.namespace.text
+                    && ca.reference.text == cb.reference.text
             }
+            (
+                AssetRef::Unit {
+                    code: a,
+                    authority: x,
+                },
+                AssetRef::Unit {
+                    code: b,
+                    authority: y,
+                },
+            ) => a.text == b.text && x.text == y.text,
             _ => false,
         }
     }
@@ -117,7 +138,13 @@ impl AssetRef {
 impl fmt::Display for AssetRef {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            AssetRef::Mint { symbol, issuer, mint_id, chain, .. } => {
+            AssetRef::Mint {
+                symbol,
+                issuer,
+                mint_id,
+                chain,
+                ..
+            } => {
                 write!(f, "mint://{symbol}/{issuer}/{mint_id}/{chain}")
             }
             AssetRef::Unit { code, authority } => write!(f, "unit://{code}/{authority}"),
@@ -137,7 +164,11 @@ pub struct RefError {
 
 impl RefError {
     fn new(code: &'static str, span: Span, message: impl Into<String>) -> Self {
-        Self { code, message: message.into(), span }
+        Self {
+            code,
+            message: message.into(),
+            span,
+        }
     }
 }
 
@@ -163,13 +194,19 @@ fn namespace_rules(ns: &str) -> Option<NamespaceRules> {
             asset_ns: "token",
             check_chain_reference: |s| {
                 if s.len() != 32 {
-                    return Err(format!("solana chain reference is 32 base58 characters, found {}", s.len()));
+                    return Err(format!(
+                        "solana chain reference is 32 base58 characters, found {}",
+                        s.len()
+                    ));
                 }
                 check_base58(s)
             },
             check_mint_id: |s| {
                 if !(32..=44).contains(&s.len()) {
-                    return Err(format!("solana mint id is 32-44 base58 characters, found {}", s.len()));
+                    return Err(format!(
+                        "solana mint id is 32-44 base58 characters, found {}",
+                        s.len()
+                    ));
                 }
                 check_base58(s)
             },
@@ -190,9 +227,15 @@ fn namespace_rules(ns: &str) -> Option<NamespaceRules> {
                     return Err("eip155 mint id starts with 0x".into());
                 };
                 if hex.len() != 40 {
-                    return Err(format!("eip155 mint id is 0x and 40 hex digits, found {}", hex.len()));
+                    return Err(format!(
+                        "eip155 mint id is 0x and 40 hex digits, found {}",
+                        hex.len()
+                    ));
                 }
-                if !hex.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) {
+                if !hex
+                    .bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+                {
                     return Err("eip155 mint id is lowercase hex".into());
                 }
                 Ok(())
@@ -207,7 +250,9 @@ fn check_base58(s: &str) -> Result<(), String> {
     for (i, c) in s.char_indices() {
         let ok = c.is_ascii_alphanumeric() && !matches!(c, '0' | 'O' | 'I' | 'l');
         if !ok {
-            return Err(format!("{c:?} at offset {i} is not base58 (0, O, I and l are excluded)"));
+            return Err(format!(
+                "{c:?} at offset {i} is not base58 (0, O, I and l are excluded)"
+            ));
         }
     }
     Ok(())
@@ -338,7 +383,10 @@ fn parse_caip19(rest: &str, off: usize, base: usize) -> Result<AssetRef, RefErro
         return Err(RefError::new(
             "E411",
             whole,
-            format!("a CAIP-19 reference takes two segments, found {}", parts.len()),
+            format!(
+                "a CAIP-19 reference takes two segments, found {}",
+                parts.len()
+            ),
         ));
     }
     let chain = parse_caip2(parts[0].1, base + off + parts[0].0)?;
@@ -397,7 +445,11 @@ fn parse_caip2(text: &str, base: usize) -> Result<Caip2, RefError> {
     };
     let ns = &text[..colon];
     let re = &text[colon + 1..];
-    if ns.is_empty() || !ns.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit()) {
+    if ns.is_empty()
+        || !ns
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
+    {
         return Err(RefError::new(
             "E410",
             base..(base + colon),
@@ -479,11 +531,20 @@ mod tests {
         let a = parse(&native(), 0).unwrap();
         let b = parse(&format!("{SOL_CHAIN}/token:{USDC_MINT}"), 0).unwrap();
         let c = parse(&format!("asset://{SOL_CHAIN}/token:{USDC_MINT}"), 0).unwrap();
-        assert!(a.same_asset(&b), "CAIP-19 denotes the same object as the native form");
+        assert!(
+            a.same_asset(&b),
+            "CAIP-19 denotes the same object as the native form"
+        );
         // Not field equality: the prefix shifts every span by its own length, which is the
         // spans being right rather than the parse being different.
         assert!(b.same_asset(&c), "the asset:// prefix carries no meaning");
-        assert!(matches!(b, AssetRef::Mint { from_caip19: true, .. }));
+        assert!(matches!(
+            b,
+            AssetRef::Mint {
+                from_caip19: true,
+                ..
+            }
+        ));
     }
 
     #[test]
@@ -492,14 +553,18 @@ mod tests {
         let src = format!("  asset X = {}", native());
         let base = src.find("mint://").unwrap();
         let r = parse(&native(), base).unwrap();
-        let AssetRef::Mint { issuer, .. } = &r else { panic!() };
+        let AssetRef::Mint { issuer, .. } = &r else {
+            panic!()
+        };
         assert_eq!(&src[issuer.span.clone()], "Circle");
     }
 
     #[test]
     fn base58_excludes_the_lookalike_characters() {
         for bad in ['0', 'O', 'I', 'l'] {
-            let mint: String = core::iter::once(bad).chain(USDC_MINT.chars().skip(1)).collect();
+            let mint: String = core::iter::once(bad)
+                .chain(USDC_MINT.chars().skip(1))
+                .collect();
             let e = parse(&format!("mint://USDC/Circle/{mint}/{SOL_CHAIN}"), 0).unwrap_err();
             assert_eq!(e.code, "E410", "{bad} should be rejected");
         }
@@ -555,7 +620,10 @@ mod tests {
     fn same_asset_ignores_the_assertions() {
         let a = parse(&native(), 0).unwrap();
         let b = parse(&format!("mint://USDT/Tether/{USDC_MINT}/{SOL_CHAIN}"), 0).unwrap();
-        assert!(a.same_asset(&b), "identity is (chain, mint_id); the rest is S7's problem");
+        assert!(
+            a.same_asset(&b),
+            "identity is (chain, mint_id); the rest is S7's problem"
+        );
         assert_ne!(a, b);
     }
 }
