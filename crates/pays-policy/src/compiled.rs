@@ -13,6 +13,12 @@ use alloc::vec::Vec;
 pub struct Compiled {
     pub charter_id: String,
     pub version: u64,
+    /// The parent pin (§8A): the charter id and the exact version this document extends.
+    ///
+    /// Part of the compiled form, and therefore part of §12.3's digest, because a child that
+    /// did not carry its parent could be re-parented under a laxer chain with its signature
+    /// still verifying. The pin is a version and not a name alone for the same reason.
+    pub extends: Option<(String, u64)>,
     pub resolver_tier: String,
     pub resolver_version: u64,
     /// The charter offset in seconds, already resolved from `UTC±HH:MM` (§2.9).
@@ -211,6 +217,11 @@ pub fn encode(c: &Compiled) -> alloc::vec::Vec<u8> {
     let mut s = String::new();
 
     let _ = writeln!(s, "charter {} {}", c.charter_id, c.version);
+    // The parent pin is part of the digest: a child that did not carry it could be re-parented
+    // under a laxer chain with its signature still verifying (§8A, §12.3).
+    if let Some((parent, v)) = &c.extends {
+        let _ = writeln!(s, "extends {parent} {v}");
+    }
     let _ = writeln!(s, "resolver {} {}", c.resolver_tier, c.resolver_version);
     let _ = writeln!(s, "offset {}", c.timezone_offset);
 
