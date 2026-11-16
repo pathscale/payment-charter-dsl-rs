@@ -11,6 +11,7 @@ pub mod compile;
 pub mod diag;
 pub mod emit;
 pub mod lex;
+pub mod link;
 pub mod json;
 pub mod parse;
 pub mod resolver;

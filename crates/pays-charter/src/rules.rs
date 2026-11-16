@@ -110,13 +110,13 @@ fn s21_s28_names(c: &Charter, t: &HashMap<String, Entry>, d: &mut Vec<Diagnostic
                     );
                 }
                 if let Some(a) = &l.applies {
-                    check_condition(a, t, &mut want, d);
+                    check_condition(a, &mut want, d);
                 }
                 for ex in exceptions(l) {
-                    check_condition(&ex.condition, t, &mut want, d);
+                    check_condition(&ex.condition, &mut want, d);
                 }
             }
-            Decl::Prohibit(p) => check_condition(&p.condition, t, &mut want, d),
+            Decl::Prohibit(p) => check_condition(&p.condition, &mut want, d),
             Decl::AssetGroup(g) => {
                 for m in &g.members {
                     want(&m.node, &m.span, &[Kind::Asset], "E216", "an asset", d);
@@ -127,16 +127,20 @@ fn s21_s28_names(c: &Charter, t: &HashMap<String, Entry>, d: &mut Vec<Diagnostic
     }
 }
 
-fn check_condition<F>(cond: &Condition, t: &HashMap<String, Entry>, want: &mut F, d: &mut Vec<Diagnostic>)
+/// Walk a condition, handing every name in a value position to `want`.
+///
+/// The symbol table is not a parameter: `want` closes over whatever it needs to look a name up
+/// in, which is what lets one walk serve rules that check different things about the same names.
+fn check_condition<F>(cond: &Condition, want: &mut F, d: &mut Vec<Diagnostic>)
 where
     F: FnMut(&str, &Span, &[Kind], &'static str, &str, &mut Vec<Diagnostic>),
 {
     match cond {
         Condition::Or(a, b) | Condition::And(a, b) => {
-            check_condition(a, t, want, d);
-            check_condition(b, t, want, d);
+            check_condition(a, want, d);
+            check_condition(b, want, d);
         }
-        Condition::Not(a) => check_condition(a, t, want, d),
+        Condition::Not(a) => check_condition(a, want, d),
         Condition::Compare(cmp) => {
             let Some(kind) = kind_for_field(&cmp.field.node) else { return };
             let (code, what) = match kind {
@@ -631,7 +635,7 @@ fn w3_unused_assets(c: &Charter, _t: &HashMap<String, Entry>, d: &mut Vec<Diagno
             Decl::Asset(a) => (&a.name.node, &a.name.span),
             _ => continue,
         };
-        if !used.iter().any(|u| *u == name.as_str()) {
+        if !used.contains(&name.as_str()) {
             d.push(Diagnostic::warning(
                 "W3",
                 format!("`{name}` is declared and never used (W3)"),

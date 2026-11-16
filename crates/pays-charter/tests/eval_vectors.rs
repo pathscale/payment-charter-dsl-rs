@@ -79,6 +79,10 @@ fn run_vector(root: &Path, path: &Path) -> VectorResult {
     let mut retired: Vec<pays_policy::compiled::Limit> = Vec::new();
     let mut ledger = Ledger::new();
     let mut clock = v.num("clock").unwrap_or(0.0) as i64;
+    // Reservations by the label their request carried, so a later step can release or settle
+    // exactly the ones a named payment created. §8.1.4 is a rule about *which* event returns
+    // an allowance, so a vector that could only release "the last thing" could not state it.
+    let mut named: std::collections::HashMap<String, Vec<u64>> = std::collections::HashMap::new();
 
     for (n, step) in v.arr("requests").unwrap_or(&[]).iter().enumerate() {
         if let Some(at) = step.num("at") {
@@ -114,6 +118,39 @@ fn run_vector(root: &Path, path: &Path) -> VectorResult {
                 }
             }
             compiled = ncompiled;
+            continue;
+        }
+
+        // §8.1.4: an amount returns to the allowance only on proof the transaction can never
+        // land — on Solana, blockhash expiry. Never on a timer, which is why this is an
+        // explicit step in a vector and not something the clock does on its own.
+        if let Some(label) = step.str("release") {
+            match named.get(label) {
+                Some(ids) => {
+                    // A decision reserves against every applicable limit, and a `count` among
+                    // them answers `false` because §8.1.3 never returns a rate. So the
+                    // assertion is that *something* was released, not that everything was.
+                    let freed = ids.iter().filter(|id| ledger.release(**id)).count();
+                    if freed == 0 {
+                        failures.push(format!("request {n}: nothing released for {label:?}"));
+                    }
+                }
+                None => failures.push(format!("request {n}: no request labelled {label:?}")),
+            }
+            continue;
+        }
+
+        if let Some(label) = step.str("settle") {
+            match named.get(label) {
+                Some(ids) => {
+                    for id in ids {
+                        if !ledger.settle(*id) {
+                            failures.push(format!("request {n}: no reservation {id} to settle"));
+                        }
+                    }
+                }
+                None => failures.push(format!("request {n}: no request labelled {label:?}")),
+            }
             continue;
         }
 
@@ -158,12 +195,18 @@ fn run_vector(root: &Path, path: &Path) -> VectorResult {
                 asset: plane,
                 venue: plane,
             },
-            date: (clock.div_euclid(86400)) as i32,
+            // §2.8: the request carries the *local* calendar date, in the charter's offset.
+            // Handing the engine a UTC day would put a payment made at 22:00 in New York on
+            // the following day, which is the boundary `date before` exists to test.
+            date: (clock + compiled.timezone_offset as i64).div_euclid(86400) as i32,
             ..Default::default()
         };
 
         let engine = Engine::with_retired(&compiled, &retired);
         let decision = engine.decide(&mut ledger, &req);
+        if let Some(label) = step.str("id") {
+            named.insert(label.to_string(), decision.reservations.clone());
+        }
         let got = match &decision.outcome {
             Outcome::Allow => "allow",
             Outcome::Escalate { .. } => "escalate",

@@ -284,11 +284,29 @@ fn used_for_money(c: &Charter, asset: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    /// The `common` tier, read at run time from the shared corpus.
+    ///
+    /// Not `include_str!`. A compile-time path into a sibling repository builds only on a
+    /// machine that happens to have that checkout beside this one: it could not build in CI and
+    /// could not build for anyone who cloned this repository alone, which is how a crate ends up
+    /// with a test suite nobody but its author can run. Reading it at run time, through the same
+    /// `CHARTER_CORPUS` the conformance harnesses use, makes the dependency explicit and
+    /// skippable rather than fatal at compile time.
+    fn resolver() -> Option<Resolver> {
+        let root = match std::env::var("CHARTER_CORPUS") {
+            // CHARTER_CORPUS points at `conformance/`; the resolver tiers are its sibling.
+            Ok(p) => std::path::PathBuf::from(p).parent()?.to_path_buf(),
+            Err(_) => std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../../payment-charter-dsl"),
+        };
+        let src = std::fs::read_to_string(root.join("resolver/common-41.json")).ok()?;
+        Some(Resolver::from_json(&src).expect("the common tier parses"))
+    }
 
-    const COMMON: &str = include_str!("../../../../payment-charter-dsl/resolver/common-41.json");
-
-    fn resolver() -> Resolver {
-        Resolver::from_json(COMMON).expect("the common tier parses")
+    /// Announce the skip. A test that quietly becomes a no-op is worse than no test, because the
+    /// suite still reports green.
+    fn no_corpus() {
+        eprintln!("corpus not found; skipping (set CHARTER_CORPUS)");
     }
 
     fn charter_with(asset_line: &str) -> String {
@@ -298,73 +316,91 @@ mod tests {
         )
     }
 
-    fn check_src(src: &str) -> Vec<Diagnostic> {
+    fn check_src(src: &str) -> Option<Vec<Diagnostic>> {
         let ast = crate::parse(src).expect("parses");
-        check(&ast, &resolver())
+        Some(check(&ast, &resolver()?))
     }
 
     fn codes(d: &[Diagnostic]) -> Vec<&str> {
         d.iter().map(|x| x.code).collect()
     }
 
+    /// A charter naming one asset, with the limit re-pointed at it.
+    fn one_asset(asset_line: &str, name: &str) -> String {
+        charter_with(asset_line).replace("100.00 X", &format!("100.00 {name}"))
+    }
+
+    const SOL: &str = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
+    const USDC_MINT: &str = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+
     #[test]
     fn the_common_tier_loads() {
-        let r = resolver();
+        let Some(r) = resolver() else { return no_corpus() };
         assert_eq!(r.version, 41);
-        assert!(r
-            .mint(
-                "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
-                "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
-            )
-            .is_some());
+        assert!(r.mint(SOL, USDC_MINT).is_some());
     }
 
     #[test]
     fn a_correct_reference_passes() {
-        let src = charter_with("asset USDC_circle = mint://USDC/Circle/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v/solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp")
-            .replace("100.00 X", "100.00 USDC_circle");
-        assert!(codes(&check_src(&src)).is_empty(), "{:?}", check_src(&src));
+        let src = one_asset(
+            &format!("asset USDC_circle = mint://USDC/Circle/{USDC_MINT}/{SOL}"),
+            "USDC_circle",
+        );
+        let Some(d) = check_src(&src) else { return no_corpus() };
+        assert!(codes(&d).is_empty(), "{d:?}");
     }
 
     #[test]
     fn a_lying_symbol_is_caught_and_the_segment_named() {
         // This is the S19 attack seen from the other side: the alias is honest about the
         // reference, and the reference is dishonest about the mint.
-        let src = charter_with("asset USDT_circle = mint://USDT/Circle/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v/solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp")
-            .replace("100.00 X", "100.00 USDT_circle");
-        let d = check_src(&src);
+        let src = one_asset(
+            &format!("asset USDT_circle = mint://USDT/Circle/{USDC_MINT}/{SOL}"),
+            "USDT_circle",
+        );
+        let Some(d) = check_src(&src) else { return no_corpus() };
         assert_eq!(codes(&d), vec!["E401"]);
         assert!(d[0].message.contains("USDC"), "{}", d[0].message);
     }
 
     #[test]
     fn a_bridged_issuer_on_a_native_mint_is_caught() {
-        let src = charter_with("asset USDC_wormhole = mint://USDC/Wormhole/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v/solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp")
-            .replace("100.00 X", "100.00 USDC_wormhole");
-        let d = check_src(&src);
+        let src = one_asset(
+            &format!("asset USDC_wormhole = mint://USDC/Wormhole/{USDC_MINT}/{SOL}"),
+            "USDC_wormhole",
+        );
+        let Some(d) = check_src(&src) else { return no_corpus() };
         assert_eq!(codes(&d), vec!["E401"]);
         assert!(d[0].message.contains("native from bridged"), "{}", d[0].message);
     }
 
     #[test]
     fn an_unknown_mint_fails_closed() {
-        let src = charter_with("asset USDC_unknown = mint://USDC/Circle/9zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz/solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp")
-            .replace("100.00 X", "100.00 USDC_unknown");
-        assert_eq!(codes(&check_src(&src)), vec!["E402"]);
+        let src = one_asset(
+            &format!("asset USDC_unknown = mint://USDC/Circle/9zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz/{SOL}"),
+            "USDC_unknown",
+        );
+        let Some(d) = check_src(&src) else { return no_corpus() };
+        assert_eq!(codes(&d), vec!["E402"]);
     }
 
     #[test]
     fn a_revoked_mint_stops_the_charter() {
-        let src = charter_with("asset STSOL_lido = mint://STSOL/Lido/7dHbWXmci3dT8UFYWYZweBLXgycu7Y3iL6trKn1Y7ARj/solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp")
-            .replace("100.00 X", "100.00 STSOL_lido");
-        assert_eq!(codes(&check_src(&src)), vec!["E406"]);
+        let src = one_asset(
+            &format!("asset STSOL_lido = mint://STSOL/Lido/7dHbWXmci3dT8UFYWYZweBLXgycu7Y3iL6trKn1Y7ARj/{SOL}"),
+            "STSOL_lido",
+        );
+        let Some(d) = check_src(&src) else { return no_corpus() };
+        assert_eq!(codes(&d), vec!["E406"]);
     }
 
     #[test]
     fn eighteen_decimals_is_refused() {
-        let src = charter_with("asset DAI_maker = mint://DAI/MakerDAO/0x6b175474e89094c44da98b954eedeac495271d0f/eip155:1")
-            .replace("100.00 X", "100.00 DAI_maker");
-        let d = check_src(&src);
+        let src = one_asset(
+            "asset DAI_maker = mint://DAI/MakerDAO/0x6b175474e89094c44da98b954eedeac495271d0f/eip155:1",
+            "DAI_maker",
+        );
+        let Some(d) = check_src(&src) else { return no_corpus() };
         assert_eq!(codes(&d), vec!["E223"]);
         assert!(d[0].message.contains("18.44 tokens"), "{}", d[0].message);
     }
@@ -373,37 +409,51 @@ mod tests {
     fn a_devnet_reference_does_not_resolve_as_mainnet() {
         // The genesis identity differs, so a devnet charter fails on mainnet and vice versa.
         // That is what makes rehearsal structurally safe rather than merely conventional.
-        let src = charter_with("asset USDC_circle = mint://USDC/Circle/4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU/solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp")
-            .replace("100.00 X", "100.00 USDC_circle");
-        assert_eq!(codes(&check_src(&src)), vec!["E402"]);
+        let src = one_asset(
+            &format!("asset USDC_circle = mint://USDC/Circle/4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU/{SOL}"),
+            "USDC_circle",
+        );
+        let Some(d) = check_src(&src) else { return no_corpus() };
+        assert_eq!(codes(&d), vec!["E402"]);
     }
 
     #[test]
     fn caip19_cannot_fail_s7() {
         // There is no author belief to contradict: symbol and issuer come from the resolver.
-        let src = charter_with("asset USDC_circle = asset://solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp/token:EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v")
-            .replace("100.00 X", "100.00 USDC_circle");
-        assert!(codes(&check_src(&src)).is_empty());
+        let src = one_asset(
+            &format!("asset USDC_circle = asset://{SOL}/token:{USDC_MINT}"),
+            "USDC_circle",
+        );
+        let Some(d) = check_src(&src) else { return no_corpus() };
+        assert!(codes(&d).is_empty(), "{d:?}");
     }
 
     #[test]
     fn a_unit_limit_without_a_rate_source_is_refused() {
-        let src = charter_with("asset USD_iso4217 = unit://USD/ISO4217")
-            .replace("100.00 X", "100.00 USD_iso4217");
-        assert_eq!(codes(&check_src(&src)), vec!["E404"]);
+        let src = one_asset("asset USD_iso4217 = unit://USD/ISO4217", "USD_iso4217");
+        let Some(d) = check_src(&src) else { return no_corpus() };
+        assert_eq!(codes(&d), vec!["E404"]);
     }
 
     #[test]
     fn a_pin_the_resolver_cannot_satisfy_is_refused() {
-        let src = charter_with("asset USDC_circle = mint://USDC/Circle/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v/solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp")
-            .replace("100.00 X", "100.00 USDC_circle")
-            .replace("resolver common@41", "resolver common@99");
-        assert_eq!(codes(&check_src(&src)), vec!["E405"]);
+        let src = one_asset(
+            &format!("asset USDC_circle = mint://USDC/Circle/{USDC_MINT}/{SOL}"),
+            "USDC_circle",
+        )
+        .replace("resolver common@41", "resolver common@99");
+        let Some(d) = check_src(&src) else { return no_corpus() };
+        assert_eq!(codes(&d), vec!["E405"]);
     }
 
     #[test]
     fn a_uniform_resolver_says_it_verifies_nothing() {
-        let ast = crate::parse(&charter_with("asset USDT_circle = mint://USDT/Circle/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v/solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp").replace("100.00 X", "100.00 USDT_circle")).unwrap();
+        // No corpus needed, and that is the point: it verifies nothing at all.
+        let src = one_asset(
+            &format!("asset USDT_circle = mint://USDT/Circle/{USDC_MINT}/{SOL}"),
+            "USDT_circle",
+        );
+        let ast = crate::parse(&src).unwrap();
         assert!(
             check(&ast, &Resolver::uniform(6)).is_empty(),
             "a uniform resolver verifies nothing, and the name is the warning"

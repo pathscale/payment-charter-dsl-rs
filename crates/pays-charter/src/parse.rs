@@ -163,6 +163,23 @@ impl Parser {
                 self.i += 1;
             }
             let v = self.uint()?.node;
+            // E312. Two parents give a limit two ceilings with no defined composition, and
+            // there is no rule in §8A that would pick between them — so it is refused here,
+            // named, rather than left to fail at whatever the header expected next.
+            while self.at_kw("extends") {
+                self.err(
+                    "E312",
+                    "a charter extends exactly one parent. Two give a limit two ceilings and \
+                     nothing in §8A composes them: H1 takes a minimum along one chain, and \
+                     there is no minimum to take across two.",
+                );
+                self.i += 1;
+                let _ = self.ident();
+                if matches!(self.peek(), Some(Tok::At)) {
+                    self.i += 1;
+                }
+                let _ = self.uint();
+            }
             Some((n, v))
         } else {
             None

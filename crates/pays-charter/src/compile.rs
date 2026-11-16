@@ -90,7 +90,7 @@ pub fn compile(c: &Charter, r: &Resolver) -> Result<Compiled, Vec<Diagnostic>> {
 
     for d in &c.decls {
         match d {
-            Decl::Prohibit(p) => match selector(&p.condition, &groups, &asset_groups, offset) {
+            Decl::Prohibit(p) => match selector(&p.condition, &groups, &asset_groups) {
                 Ok(s) => prohibitions.push(Prohibition { id: p.name.node.clone(), selector: s }),
                 Err(e) => errors.push(e),
             },
@@ -122,6 +122,7 @@ pub fn compile(c: &Charter, r: &Resolver) -> Result<Compiled, Vec<Diagnostic>> {
     Ok(Compiled {
         charter_id: c.name.node.clone(),
         version: c.version,
+        extends: c.extends.as_ref().map(|(n, v)| (n.node.clone(), *v)),
         resolver_tier: c.resolver_tier.node.clone(),
         resolver_version: c.resolver_version,
         timezone_offset: offset,
@@ -177,7 +178,7 @@ fn compile_limit(
         }
     };
     for e in excs {
-        let sel = match selector(&e.condition, groups, asset_groups, charter_offset) {
+        let sel = match selector(&e.condition, groups, asset_groups) {
             Ok(s) => s,
             Err(d) => {
                 errors.push(d);
@@ -205,7 +206,7 @@ fn compile_limit(
     }
 
     let applies = match &l.applies {
-        Some(c) => match selector(c, groups, asset_groups, charter_offset) {
+        Some(c) => match selector(c, groups, asset_groups) {
             Ok(s) => Some(s),
             Err(d) => {
                 errors.push(d);
@@ -318,23 +319,28 @@ fn offset_seconds(tz: &str) -> i32 {
     }
 }
 
+/// Compile a condition.
+///
+/// The charter offset is deliberately absent. A date literal is a calendar date and denotes the
+/// same day whatever the offset is; it is the *request* that carries a local date, computed by
+/// the caller from the offset (§2.8). Threading an offset through here would suggest the literal
+/// moves, and it does not.
 fn selector(
     c: &ast::Condition,
     groups: &HashMap<&str, Vec<Atom>>,
     asset_groups: &[(String, Vec<String>)],
-    offset: i32,
 ) -> Result<Selector, Diagnostic> {
     Ok(match c {
         ast::Condition::And(a, b) => Selector::And(
-            Box::new(selector(a, groups, asset_groups, offset)?),
-            Box::new(selector(b, groups, asset_groups, offset)?),
+            Box::new(selector(a, groups, asset_groups)?),
+            Box::new(selector(b, groups, asset_groups)?),
         ),
         ast::Condition::Or(a, b) => Selector::Or(
-            Box::new(selector(a, groups, asset_groups, offset)?),
-            Box::new(selector(b, groups, asset_groups, offset)?),
+            Box::new(selector(a, groups, asset_groups)?),
+            Box::new(selector(b, groups, asset_groups)?),
         ),
         ast::Condition::Not(a) => {
-            Selector::Not(Box::new(selector(a, groups, asset_groups, offset)?))
+            Selector::Not(Box::new(selector(a, groups, asset_groups)?))
         }
         ast::Condition::Compare(cmp) => {
             let Some(field) = Field::parse(&cmp.field.node) else {
